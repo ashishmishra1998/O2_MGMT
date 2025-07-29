@@ -1,0 +1,92 @@
+{% load widget_tweaks %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clients List</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="#">O2 Bottles MGMT</a>
+        <div class="collapse navbar-collapse">
+            <ul class="navbar-nav ms-auto">
+                {% if request.user.username == 'admin' %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'admin_dashboard' %}">Dashboard</a></li>
+                {% else %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'delivery_dashboard' %}">Dashboard</a></li>
+                {% endif %}
+                <li class="nav-item"><a class="nav-link active" href="{% url 'client_list' %}">Clients</a></li>
+                <li class="nav-item"><a class="nav-link" href="{% url 'transaction_list' %}">Transactions</a></li>
+                {% if request.user.username == 'admin' %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'reports' %}">Reports</a></li>
+                {% endif %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'logout' %}">Logout</a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+<div class="container mt-5">
+    <h2>Clients</h2>
+    <form method="get" class="row g-3 mb-3">
+        <div class="col-auto">
+            <input type="text" name="q" class="form-control" placeholder="Search by name" value="{{ query }}">
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-primary">Search</button>
+        </div>
+        <div class="col-auto">
+            {% if request.user.username == 'admin' %}
+            <a href="{% url 'client_create' %}" class="btn btn-success">Add New Client</a>
+            {% endif %}
+        </div>
+    </form>
+    <table class="table table-bordered table-striped">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Contact</th>
+                <th>Email</th>
+                <th>Address</th>
+                <th>Total Delivered</th>
+                <th>Total Returned</th>
+                <th>Total Pending</th>
+                <th>Unbilled Pending</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for stat in client_stats %}
+            <tr>
+                <td>{{ stat.client.name }}</td>
+                <td>{{ stat.client.contact }}</td>
+                <td>{{ stat.client.email }}</td>
+                <td>{{ stat.client.address }}</td>
+                <td>{{ stat.delivered }}</td>
+                <td>{{ stat.returned }}</td>
+                <td>{{ stat.pending }}</td>
+                <td>{{ stat.unbilled_pending }}</td>
+                <td>
+                    <div class="btn-group" role="group">
+                        {% if stat.unbilled_pending > 0 %}
+                            <a href="{% url 'generate_bill' stat.client.id %}" class="btn btn-sm btn-info">Auto Bill</a>
+                        {% else %}
+                            <button class="btn btn-sm btn-secondary" disabled>No New Transactions</button>
+                        {% endif %}
+                        <a href="{% url 'custom_billing' stat.client.id %}" class="btn btn-sm btn-primary">Custom Bill</a>
+                        <a href="{% url 'bill_history' stat.client.id %}" class="btn btn-sm btn-warning">Bill History</a>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="9" class="text-center">No clients found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+</body>
+</html> 

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>O2 Bottles MGMT Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #e3f0fa 0%, #b6d0e2 60%, #3a8dde 100%);
+            min-height: 100vh;
+            font-family: 'Roboto', Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            max-width: 400px;
+            width: 100%;
+            margin: 40px auto;
+            padding: 2.5rem 2rem 2rem 2rem;
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 8px 32px 0 rgba(60, 120, 200, 0.10);
+            position: relative;
+            overflow: hidden;
+        }
+        .login-logo {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #20bfa9 60%, #3a8dde 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 18px auto;
+            box-shadow: 0 2px 8px rgba(32, 191, 169, 0.12);
+        }
+        .login-logo i {
+            color: #fff;
+            font-size: 2rem;
+        }
+        h2 {
+            font-weight: 700;
+            color: #20bfa9;
+            text-align: center;
+            margin-bottom: 1.2rem;
+            letter-spacing: 1px;
+        }
+        .form-label {
+            font-weight: 500;
+            color: #3a3a3a;
+        }
+        .form-select, .form-control {
+            margin-bottom: 1.1rem;
+            border-radius: 8px;
+            border: 1px solid #e0e6ed;
+            transition: box-shadow 0.2s, border-color 0.2s;
+        }
+        .form-select:focus, .form-control:focus {
+            border-color: #20bfa9;
+            box-shadow: 0 0 0 2px rgba(32, 191, 169, 0.15);
+        }
+        .btn-primary {
+            background: linear-gradient(90deg, #20bfa9 60%, #3a8dde 100%);
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            transition: transform 0.12s, box-shadow 0.12s, background 0.2s;
+            box-shadow: 0 2px 8px rgba(32, 191, 169, 0.10);
+        }
+        .btn-primary:hover, .btn-primary:focus {
+            background: linear-gradient(90deg, #3a8dde 60%, #20bfa9 100%);
+            transform: scale(1.03);
+            box-shadow: 0 4px 16px rgba(32, 191, 169, 0.18);
+        }
+        .alert-danger {
+            font-size: 0.98rem;
+            border-radius: 6px;
+        }
+        @media (max-width: 500px) {
+            .login-container {
+                padding: 1.2rem 0.7rem 1.5rem 0.7rem;
+                max-width: 98vw;
+            }
+            .login-logo {
+                width: 48px;
+                height: 48px;
+            }
+        }
+    </style>
+    <script src="https://kit.fontawesome.com/4b8b59b1e0.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="login-container">
+        <div class="text-center mb-2">
+            <svg width="48" height="60" viewBox="0 0 48 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="14" y="10" width="20" height="40" rx="8" fill="#20bfa9"/>
+                <rect x="18" y="2" width="12" height="12" rx="4" fill="#3a8dde"/>
+                <rect x="20" y="0" width="8" height="6" rx="2" fill="#b6d0e2"/>
+                <rect x="18" y="50" width="12" height="6" rx="3" fill="#3a8dde"/>
+                <rect x="22" y="56" width="4" height="4" rx="2" fill="#20bfa9"/>
+            </svg>
+        </div>
+        <h2>O2 Bottles MGMT Login</h2>
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        <form method="post" autocomplete="off">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label for="user_type" class="form-label">Login as</label>
+                <select class="form-select" id="user_type" name="user_type" required>
+                    <option value="admin">Admin</option>
+                    <option value="delivery">Delivery Boy</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" class="form-control" id="username" name="username" required autocomplete="username">
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Login</button>
+        </form>
+    </div>
+</body>
+</html> 

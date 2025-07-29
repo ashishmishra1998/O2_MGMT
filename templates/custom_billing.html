@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Billing - {{ client.name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="#">O2 Bottles MGMT</a>
+        <div class="collapse navbar-collapse">
+            <ul class="navbar-nav ms-auto">
+                {% if request.user.username == 'admin' %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'admin_dashboard' %}">Dashboard</a></li>
+                {% else %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'delivery_dashboard' %}">Dashboard</a></li>
+                {% endif %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'client_list' %}">Clients</a></li>
+                <li class="nav-item"><a class="nav-link" href="{% url 'transaction_list' %}">Transactions</a></li>
+                {% if request.user.username == 'admin' %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'reports' %}">Reports</a></li>
+                {% endif %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'logout' %}">Logout</a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Custom Billing for {{ client.name }}</h2>
+                <a href="{% url 'client_list' %}" class="btn btn-secondary">Back to Clients</a>
+            </div>
+
+            <!-- Client Info Card -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Client Information</h5>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <strong>Name:</strong> {{ client.name }}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Contact:</strong> {{ client.contact }}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Email:</strong> {{ client.email }}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Price per Bottle:</strong> ₹{{ price }}
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <strong>Address:</strong> {{ client.address }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Filter Transactions</h5>
+                    <form method="GET" class="row g-3">
+                        <div class="col-md-3">
+                            <label for="start_date" class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" 
+                                   value="{{ start_date|date:'Y-m-d' }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="end_date" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date" 
+                                   value="{{ end_date|date:'Y-m-d' }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="transaction_type" class="form-label">Transaction Type</label>
+                            <select class="form-select" id="transaction_type" name="transaction_type">
+                                <option value="">All Types</option>
+                                <option value="delivered" {% if transaction_type == 'delivered' %}selected{% endif %}>Delivered</option>
+                                <option value="returned" {% if transaction_type == 'returned' %}selected{% endif %}>Returned</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary me-2">Filter</button>
+                            <a href="{% url 'custom_billing' client.id %}" class="btn btn-outline-secondary">Clear</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Custom Bill Creation Form -->
+            <form method="POST" action="{% url 'create_custom_bill' client.id %}">
+                {% csrf_token %}
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title mb-0">Select Transactions for Custom Bill</h5>
+                            <div>
+                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectAll()">Select All</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="deselectAll()">Deselect All</button>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Bill Description (Optional)</label>
+                            <textarea class="form-control" id="description" name="description" rows="2" 
+                                      placeholder="Enter a description for this custom bill..."></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-success" id="create-bill-btn" disabled>
+                            Create Custom Bill
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Transactions by Date -->
+                {% if transactions_by_date %}
+                    {% for date, transactions in transactions_by_date.items %}
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">{{ date|date:"l, F j, Y" }}</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th width="50">
+                                                <input type="checkbox" class="form-check-input date-select-all" 
+                                                       data-date="{{ date }}" onchange="toggleDateSelection('{{ date }}')">
+                                            </th>
+                                            <th>Time</th>
+                                            <th>Bottle Code</th>
+                                            <th>Type</th>
+                                            <th>Delivered By</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for transaction in transactions %}
+                                        <tr class="{% if transaction.id in custom_billed_transactions %}table-secondary{% endif %}">
+                                            <td>
+                                                {% if transaction.id not in custom_billed_transactions %}
+                                                <input type="checkbox" class="form-check-input transaction-checkbox" 
+                                                       name="selected_transactions" value="{{ transaction.id }}"
+                                                       data-date="{{ date }}" onchange="updateCreateButton()">
+                                                {% else %}
+                                                <span class="text-muted">✓</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ transaction.date|time:"H:i" }}</td>
+                                            <td>
+                                                <a href="{% url 'bottle_photos' transaction.bottle.code %}" 
+                                                   class="text-decoration-none">
+                                                    {{ transaction.bottle.code }}
+                                                </a>
+                                            </td>
+                                            <td>
+                                                <span class="badge {% if transaction.transaction_type == 'delivered' %}bg-success{% else %}bg-warning{% endif %}">
+                                                    {{ transaction.transaction_type|title }}
+                                                </span>
+                                            </td>
+                                            <td>{{ transaction.delivered_by.username|title }}</td>
+                                            <td>
+                                                {% if transaction.id in custom_billed_transactions %}
+                                                <span class="badge bg-secondary">Custom Billed</span>
+                                                {% elif transaction.billed %}
+                                                <span class="badge bg-info">Auto Billed</span>
+                                                {% else %}
+                                                <span class="badge bg-light text-dark">Unbilled</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h5 class="text-muted">No transactions found</h5>
+                            <p>Try adjusting your filters or check if there are any transactions for this client.</p>
+                        </div>
+                    </div>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function selectAll() {
+    document.querySelectorAll('.transaction-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    document.querySelectorAll('.date-select-all').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    updateCreateButton();
+}
+
+function deselectAll() {
+    document.querySelectorAll('.transaction-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    document.querySelectorAll('.date-select-all').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateCreateButton();
+}
+
+function toggleDateSelection(date) {
+    const dateCheckbox = document.querySelector(`.date-select-all[data-date="${date}"]`);
+    const transactionCheckboxes = document.querySelectorAll(`.transaction-checkbox[data-date="${date}"]`);
+    
+    transactionCheckboxes.forEach(checkbox => {
+        checkbox.checked = dateCheckbox.checked;
+    });
+    
+    updateCreateButton();
+}
+
+function updateCreateButton() {
+    const selectedCheckboxes = document.querySelectorAll('.transaction-checkbox:checked');
+    const createButton = document.getElementById('create-bill-btn');
+    
+    if (selectedCheckboxes.length > 0) {
+        createButton.disabled = false;
+        createButton.textContent = `Create Custom Bill (${selectedCheckboxes.length} transactions)`;
+    } else {
+        createButton.disabled = true;
+        createButton.textContent = 'Create Custom Bill';
+    }
+}
+
+// Initialize button state
+document.addEventListener('DOMContentLoaded', function() {
+    updateCreateButton();
+});
+</script>
+</body>
+</html> 

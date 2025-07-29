@@ -1,0 +1,65 @@
+{% load widget_tweaks %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bottle Transaction</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="#">O2 Bottles MGMT</a>
+        <div class="collapse navbar-collapse">
+            <ul class="navbar-nav ms-auto">
+                {% if request.user.username == 'admin' %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'admin_dashboard' %}">Dashboard</a></li>
+                {% else %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'delivery_dashboard' %}">Dashboard</a></li>
+                {% endif %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'client_list' %}">Clients</a></li>
+                <li class="nav-item"><a class="nav-link active" href="{% url 'transaction_list' %}">Transactions</a></li>
+                {% if request.user.username == 'admin' %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'reports' %}">Reports</a></li>
+                {% endif %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'logout' %}">Logout</a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+<div class="container mt-5">
+    <h2>Bottle {{ transaction_type|title }} Transaction</h2>
+    {% if message %}
+    <div class="alert alert-warning">{{ message }}</div>
+    {% endif %}
+    <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <input type="hidden" name="transaction_type" value="{{ transaction_type }}">
+        <div class="mb-3">
+            <label class="form-label">Transaction Type</label>
+            <input type="text" class="form-control" value="{{ transaction_type|title }}" readonly>
+        </div>
+        <div class="mb-3">
+            <label for="id_client" class="form-label">Client</label>
+            {{ form.client|add_class:'form-select' }}
+            {{ form.client.errors }}
+        </div>
+        <div class="mb-3">
+            <label for="id_bottle" class="form-label">Bottle</label>
+            {{ form.bottle|add_class:'form-select' }}
+            {{ form.bottle.errors }}
+        </div>
+        <div class="mb-3">
+            <label for="id_photo" class="form-label">Photo</label>
+            {{ form.photo|add_class:'form-control' }}
+            {{ form.photo.errors }}
+        </div>
+        <button type="submit" class="btn btn-success" {% if not form.fields.bottle.queryset.exists %}disabled{% endif %}>Submit</button>
+        <a href="{% url 'transaction_create' %}" class="btn btn-secondary">Back to Type Selection</a>
+        <a href="{% url 'transaction_list' %}" class="btn btn-secondary">Back to List</a>
+    </form>
+</div>
+</body>
+</html> 

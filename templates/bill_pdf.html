@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Bill - {{ client.name }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .client-info {
+            margin-bottom: 30px;
+        }
+        .bill-details {
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .total-row {
+            background-color: #e8f5e8;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>O2 Bottles Management</h1>
+        <h2>Bill for {{ client.name }}</h2>
+    </div>
+    
+    <div class="client-info">
+        <h3>Client Information</h3>
+        <p><strong>Name:</strong> {{ client.name }}</p>
+        <p><strong>Contact:</strong> {{ client.contact }}</p>
+        <p><strong>Email:</strong> {{ client.email }}</p>
+        <p><strong>Address:</strong> {{ client.address }}</p>
+    </div>
+    
+    <div class="bill-details">
+        <h3>Bill Details</h3>
+        <p><strong>Bill Date:</strong> {{ bill_date|date:"F d, Y" }}</p>
+        <p><strong>Bill Number:</strong> {{ bill.id }}</p>
+    </div>
+    
+    <table>
+        <tr>
+            <th>Description</th>
+            <th>Quantity</th>
+            <th>Rate (₹)</th>
+            <th>Amount (₹)</th>
+        </tr>
+        <tr>
+            <td>Oxygen Bottles (Delivered)</td>
+            <td>{{ delivered }}</td>
+            <td>{{ price }}</td>
+            <td>{{ delivered|multiply:price }}</td>
+        </tr>
+        <tr>
+            <td>Oxygen Bottles (Returned)</td>
+            <td>{{ returned }}</td>
+            <td>{{ price }}</td>
+            <td>-{{ returned|multiply:price }}</td>
+        </tr>
+        <tr class="total-row">
+            <td><strong>Total (Pending Bottles)</strong></td>
+            <td><strong>{{ pending }}</strong></td>
+            <td><strong>{{ price }}</strong></td>
+            <td><strong>₹{{ total }}</strong></td>
+        </tr>
+    </table>
+    
+    <div class="footer">
+        <p>Thank you for your business!</p>
+        <p>Generated on {{ bill_date|date:"F d, Y at H:i" }}</p>
+    </div>
+</body>
+</html> 
