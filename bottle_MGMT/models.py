@@ -4,6 +4,10 @@ from django.contrib.auth.models import User
 # Create your models here.
 
 class Client(models.Model):
+    ROLE_CHOICES = [
+        ('customer', 'Customer'),
+        ('admin', 'Admin'),
+    ]
     name = models.CharField(max_length=100)
     contact = models.CharField(max_length=10)
     alt_contact = models.CharField(max_length=10, blank=True, null=True) 
@@ -11,6 +15,13 @@ class Client(models.Model):
     address = models.TextField()
     company_name = models.CharField(max_length=150, blank=True, null=True)
     gst_number = models.CharField(max_length=20, blank=True, null=True)
+    
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='customer')
+    # Admin profile fields
+    owner_gst = models.CharField(max_length=20, blank=True, null=True)
+    bank_account = models.CharField(max_length=50, blank=True, null=True)
+    card = models.CharField(max_length=50, blank=True, null=True)
+
 
 
     def __str__(self):

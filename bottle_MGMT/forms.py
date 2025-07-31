@@ -19,6 +19,11 @@ class ClientForm(forms.ModelForm):
         model = Client
         fields = ['name', 'contact', 'email', 'address', 'company_name', 'gst_number', 'alt_contact']
 
+class AdminProfileForm(forms.ModelForm):
+    class Meta:
+        model = Client
+        fields = ['owner_gst', 'bank_account', 'card', 'contact']
+
     def clean_contact(self):
         contact = self.cleaned_data['contact']
         if not contact.isdigit() or len(contact) != 10:

@@ -2,9 +2,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.http import HttpResponse
-from .forms import ClientForm, AddBottlesForm
 from .models import Client
-from .forms import TransactionForm
+from .forms import TransactionForm, AdminProfileForm, BottlePricingForm, ClientForm, AddBottlesForm
 from .models import Transaction, Bottle, Bill, BillTransaction
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
@@ -14,7 +13,6 @@ from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.http import HttpResponseForbidden
 from .models import BottlePricing
-from .forms import BottlePricingForm
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
@@ -779,3 +777,16 @@ def debug_photos(request):
             'photo_exists': t.photo and t.photo.storage.exists(t.photo.name) if t.photo else False,
         })
     return render(request, 'debug_photos.html', {'photo_info': photo_info})
+
+
+@login_required
+def admin_profile(request):
+    admin_client, created = Client.objects.get_or_create(role='admin', defaults={'name': 'Admin'})
+    if request.method == 'POST':
+        form = AdminProfileForm(request.POST, instance=admin_client)
+        if form.is_valid():
+            form.save()
+            return redirect('admin_profile')
+    else:
+        form = AdminProfileForm(instance=admin_client)
+    return render(request, 'admin_profile.html', {'form': form})

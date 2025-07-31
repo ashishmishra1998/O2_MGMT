@@ -43,6 +43,7 @@ urlpatterns = [
     path('bills/<int:bill_id>/mark-paid/', views.mark_bill_paid, name='mark_bill_paid'),
     path('bills/<int:bill_id>/delete/', views.delete_bill, name='delete_bill'),
     path('sales/', views.sales_analytics, name='sales_analytics'),
+    path('admin-profile/', views.admin_profile, name='admin_profile'),
 ]
 
 # Serve media files in development

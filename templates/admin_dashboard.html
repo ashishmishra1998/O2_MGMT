@@ -15,6 +15,8 @@
             <ul class="navbar-nav ms-auto">
                 {% if request.user.username == 'admin' %}
                 <li class="nav-item"><a class="nav-link active" href="{% url 'admin_dashboard' %}">Dashboard</a></li>
+                <li class="nav-item"><a class="nav-link" href="{% url 'admin_profile' %}">Profile</a></li>
+
                 {% else %}
                 <li class="nav-item"><a class="nav-link active" href="{% url 'delivery_dashboard' %}">Dashboard</a></li>
                 {% endif %}
