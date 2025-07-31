@@ -17,7 +17,7 @@ class AddBottlesForm(forms.Form):
 class ClientForm(forms.ModelForm):
     class Meta:
         model = Client
-        fields = ['name', 'contact', 'email', 'address']
+        fields = ['name', 'contact', 'email', 'address', 'company_name', 'gst_number', 'alt_contact']
 
     def clean_contact(self):
         contact = self.cleaned_data['contact']
