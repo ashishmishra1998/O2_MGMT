@@ -4,10 +4,31 @@ from django.contrib.auth.models import User
 # Create your models here.
 
 class Client(models.Model):
+    ROLE_CHOICES = [
+        ('customer', 'Customer'),
+        ('admin', 'Admin'),
+    ]
     name = models.CharField(max_length=100)
     contact = models.CharField(max_length=10)
+    alt_contact = models.CharField(max_length=10, blank=True, null=True) 
     email = models.EmailField()
     address = models.TextField()
+    company_name = models.CharField(max_length=150, blank=True, null=True)
+    gst_number = models.CharField(max_length=20, blank=True, null=True)
+    
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='customer')
+    # Admin profile fields
+    owner_gst = models.CharField(max_length=20, blank=True, null=True)
+    bank_account = models.CharField(max_length=50, blank=True, null=True)
+    card = models.CharField(max_length=50, blank=True, null=True)
+
+
+
+    def __str__(self):
+        return self.name
+
+class BottleCategory(models.Model):
+    name = models.CharField(max_length=50, unique=True)
 
     def __str__(self):
         return self.name
@@ -20,6 +41,7 @@ class Bottle(models.Model):
     ]
     code = models.CharField(max_length=10, unique=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='in_stock')
+    category = models.ForeignKey(BottleCategory, on_delete=models.SET_DEFAULT, default=1)
 
     def __str__(self):
         return f"Bottle {self.code}"
@@ -49,16 +71,22 @@ class Transaction(models.Model):
         ('delivered', 'Delivered'),
         ('returned', 'Returned'),
     ]
-    bottle = models.ForeignKey(Bottle, on_delete=models.CASCADE)
+    bottles = models.ManyToManyField(Bottle)
     client = models.ForeignKey(Client, on_delete=models.CASCADE)
     date = models.DateTimeField(auto_now_add=True)
-    photo = models.ImageField(upload_to='bottle_photos/')
     delivered_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPE)
     billed = models.BooleanField(default=False)  # Track if this transaction has been billed
 
     def __str__(self):
         return f"{self.bottle} - {self.transaction_type} - {self.client}"
+
+class TransactionPhoto(models.Model):
+    transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, related_name='photos')
+    image = models.ImageField(upload_to='bottle_photos/')
+
+    def __str__(self):
+        return f"Photo for Transaction {self.transaction.id}"
 
 class Bill(models.Model):
     BILL_TYPE_CHOICES = [

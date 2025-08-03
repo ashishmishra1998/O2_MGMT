@@ -41,6 +41,11 @@
             {{ form.end|add_class:'form-control' }}
             {{ form.end.errors }}
         </div>
+        <div class="mb-3">
+            <label for="id_category" class="form-label">Bottle Category</label>
+            {{ form.category|add_class:'form-select' }}
+            {{ form.category.errors }}
+        </div>
         <button type="submit" class="btn btn-success">Add Bottles</button>
         <a href="{% url 'inventory' %}" class="btn btn-secondary">Back to Inventory</a>
     </form>

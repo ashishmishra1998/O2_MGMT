@@ -51,10 +51,31 @@
                     </div>
                     <div class="col-12">
                         <div class="form-floating">
+                            {{ form.company_name|add_class:'form-control' }}
+                            <label for="id_company_name">Company Name</label>
+                        </div>
+                        <div class="text-danger small">{{ form.company_name.errors }}</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-floating">
+                            {{ form.gst_number|add_class:'form-control' }}
+                            <label for="id_gst_number">GST Number</label>
+                        </div>
+                        <div class="text-danger small">{{ form.gst_number.errors }}</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-floating">
                             {{ form.contact|add_class:'form-control' }}
                             <label for="id_contact">Contact Number</label>
                         </div>
                         <div class="text-danger small">{{ form.contact.errors }}</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-floating">
+                            {{ form.alt_contact|add_class:'form-control' }}
+                            <label for="id_alt_contact">Alternative Mobile Number</label>
+                        </div>
+                        <div class="text-danger small">{{ form.alt_contact.errors }}</div>
                     </div>
                     <div class="col-12">
                         <div class="form-floating">
