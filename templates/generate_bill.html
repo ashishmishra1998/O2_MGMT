@@ -29,20 +29,14 @@
         {% endif %}
         <strong>Contact:</strong> {{ client.contact }}<br>
         <strong>Email:</strong> {{ client.email }}<br>
-        <strong>Address:</strong> {{ client.address }}
+        <strong>Address:</strong> {{ client.address }}<br>
+        <strong>GST Number:</strong> {{ client.gst_number }}<br>
+
     </div>
     <table class="table table-bordered w-50">
         <tr>
             <th>Bottles Delivered</th>
             <td>{{ delivered }}</td>
-        </tr>
-        <tr>
-            <th>Bottles Returned</th>
-            <td>{{ returned }}</td>
-        </tr>
-        <tr>
-            <th>Pending Bottles</th>
-            <td>{{ pending }}</td>
         </tr>
         <tr>
             <th>Price per Bottle</th>
@@ -57,7 +51,6 @@
         <a href="{% url 'generate_bill' client.id bill.id %}?format=pdf" class="btn btn-danger">Export PDF</a>
         <button class="btn btn-primary" onclick="window.print()">Print Bill</button>
         <a href="{% url 'bill_history' client.id %}" class="btn btn-info">View Bill History</a>
-        <a href="{% url 'custom_billing' client.id %}" class="btn btn-primary">Custom Billing</a>
         <a href="{% url 'client_list' %}" class="btn btn-secondary">Back to Clients</a>
     </div>
 </div>

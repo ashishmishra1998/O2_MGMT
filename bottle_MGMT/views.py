@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.http import HttpResponse
 from .models import Client
 from .forms import TransactionForm, AdminProfileForm, BottlePricingForm, ClientForm, AddBottlesForm
-from .models import Transaction, Bottle, Bill, BillTransaction
+from .models import Transaction, Bottle, Bill, BillTransaction, TransactionPhoto
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from datetime import timedelta
@@ -57,6 +57,7 @@ def admin_dashboard(request):
     in_stock = Bottle.objects.filter(status='in_stock').count()
     pending = delivered  # Bottles delivered but not yet returned
     recent_transactions = Transaction.objects.order_by('-date')[:5]
+    recent_transactions = Transaction.objects.prefetch_related('bottles').order_by('-date')[:5]
     return render(request, 'admin_dashboard.html', {
         'total_bottles': total_bottles,
         'delivered': delivered,
@@ -99,38 +100,29 @@ def client_list(request):
     from .models import Transaction
     client_stats = []
     for client in clients:
-        delivered = Transaction.objects.filter(client=client, transaction_type='delivered').count()
-        returned = Transaction.objects.filter(client=client, transaction_type='returned').count()
-        pending = delivered - returned
+        delivered_bottles = sum(
+            t.bottles.count() for t in Transaction.objects.filter(client=client, transaction_type='delivered')
+        )
+        # Count bottles for returned transactions
+        returned_bottles = sum(
+            t.bottles.count() for t in Transaction.objects.filter(client=client, transaction_type='returned')
+        )
+        pending_bottles = delivered_bottles - returned_bottles
         
-        # Count unbilled transactions for billing info (excluding custom billed transactions)
-        custom_billed_transaction_ids = BillTransaction.objects.filter(
-            bill__client=client, 
-            bill__bill_type='custom'
-        ).values_list('transaction_id', flat=True)
-        
-        unbilled_delivered = Transaction.objects.filter(
-            client=client, 
-            transaction_type='delivered', 
-            billed=False
-        ).exclude(id__in=custom_billed_transaction_ids).count()
-        
-        unbilled_returned = Transaction.objects.filter(
-            client=client, 
-            transaction_type='returned', 
-            billed=False
-        ).exclude(id__in=custom_billed_transaction_ids).count()
-        
-        unbilled_pending = unbilled_delivered - unbilled_returned
-        
+        # Total bottles in delivered transactions that are not yet billed
+        pending_bill_bottles = sum(
+            t.bottles.count() for t in Transaction.objects.filter(
+                client=client,
+                transaction_type='delivered',
+                billed=False
+            )
+        )
         client_stats.append({
             'client': client,
-            'delivered': delivered,
-            'returned': returned,
-            'pending': pending,
-            'unbilled_delivered': unbilled_delivered,
-            'unbilled_returned': unbilled_returned,
-            'unbilled_pending': unbilled_pending,
+            'delivered': delivered_bottles,
+            'returned': returned_bottles,
+            'pending': pending_bottles,
+            'pending_bill_bottles': pending_bill_bottles,
         })
     return render(request, 'client_list.html', {'clients': clients, 'query': query, 'client_stats': client_stats})
 
@@ -147,17 +139,24 @@ def transaction_create(request):
             transaction = form.save(commit=False)
             transaction.delivered_by = request.user
             transaction.save()
+            form.save_m2m()
+            
+            # Save multiple photos
+            photos = request.FILES.getlist('photos')
+            for photo in photos:
+                print(f"Saving photo: {photo.name}")
+                TransactionPhoto.objects.create(transaction=transaction, image=photo)
+
             # Update bottle status
-            bottle = transaction.bottle
+            bottles = transaction.bottles.all()
             if transaction.transaction_type == 'delivered':
-                bottle.status = 'delivered'
+                bottles.update(status='delivered')
             elif transaction.transaction_type == 'returned':
-                bottle.status = 'in_stock'
-            bottle.save()
+                bottles.update(status='in_stock')
             return redirect('transaction_list')
     else:
         form = TransactionForm(transaction_type=transaction_type)
-        if not form.fields['bottle'].queryset.exists():
+        if not form.fields['bottles'].queryset.exists():
             if transaction_type == 'delivered':
                 message = 'No bottles available in stock for delivery.'
             elif transaction_type == 'returned':
@@ -170,6 +169,10 @@ def transaction_list(request):
         transactions = Transaction.objects.filter(delivered_by=request.user)
     else:
         transactions = Transaction.objects.all()
+        
+    # show lateset first
+    transactions = transactions.order_by('-date')
+    
     # Filtering
     client_id = request.GET.get('client')
     if client_id:
@@ -177,6 +180,7 @@ def transaction_list(request):
     transaction_type = request.GET.get('type')
     if transaction_type:
         transactions = transactions.filter(transaction_type=transaction_type)
+    transactions = transactions.prefetch_related('bottles')
     return render(request, 'transaction_list.html', {
         'transactions': transactions,
         'clients': Client.objects.all(),
@@ -307,7 +311,7 @@ def custom_billing_view(request, client_id):
     transaction_type = request.GET.get('transaction_type', '')
     
     # Get all transactions for this client
-    transactions = Transaction.objects.filter(client=client).order_by('-date')
+    transactions = Transaction.objects.filter(client=client, transaction_type='delivered').order_by('-date')
     
     # Apply filters
     if start_date:
@@ -391,23 +395,17 @@ def create_custom_bill(request, client_id):
         return redirect('custom_billing', client_id=client_id)
     
     # Calculate bill amounts
-    delivered_count = selected_transactions.filter(transaction_type='delivered').count()
-    returned_count = selected_transactions.filter(transaction_type='returned').count()
-    pending_count = delivered_count - returned_count
-    
-    if pending_count <= 0:
-        messages.error(request, 'No pending bottles to bill. Delivered bottles must exceed returned bottles.')
-        return redirect('custom_billing', client_id=client_id)
-    
+    total_bottles_delivered = sum(t.bottles.count() for t in selected_transactions)
     price = BottlePricing.get_solo().price
-    total_amount = pending_count * price
+    total_amount = total_bottles_delivered * price
+    
     
     # Create custom bill
     bill = Bill.objects.create(
         client=client,
-        delivered_bottles=delivered_count,
-        returned_bottles=returned_count,
-        pending_bottles=pending_count,
+        delivered_bottles=total_bottles_delivered,
+        returned_bottles=0,
+        pending_bottles=total_bottles_delivered,
         price_per_bottle=price,
         total_amount=total_amount,
         generated_by=request.user,
@@ -425,7 +423,7 @@ def create_custom_bill(request, client_id):
     # Mark transactions as billed
     selected_transactions.update(billed=True)
     
-    messages.success(request, f'Custom bill created successfully for {pending_count} pending bottles.')
+    messages.success(request, f'Custom bill created successfully for {total_bottles_delivered} bottles.')
     
     # Redirect to bill view
     return redirect('generate_bill', client_id=client_id, bill_id=bill.id)
@@ -457,24 +455,28 @@ def generate_bill(request, client_id, bill_id=None):
         return render(request, 'generate_bill.html', context)
     
     # Original automated billing logic
-    # Only count unbilled transactions that are not in custom bills
-    delivered = Transaction.objects.filter(client=client, transaction_type='delivered', billed=False).count()
-    returned = Transaction.objects.filter(client=client, transaction_type='returned', billed=False).count()
-    pending = delivered - returned
-    price = BottlePricing.get_solo().price
-    total = pending * price
+    delivered_transactions = Transaction.objects.filter(
+        client=client, transaction_type='delivered', billed=False
+    )
+    delivered_count = delivered_transactions.count()
+    delivered_bottles = sum(t.bottles.count() for t in delivered_transactions)
     
-    # Check if there are any transactions to bill
-    if delivered == 0 and returned == 0:
-        messages.warning(request, 'No new transactions to bill for this client.')
+    if delivered_count == 0:
+        messages.warning(request, 'No new delivered transactions to bill for this client.')
         return redirect('client_list')
+
+    returned_transactions = Transaction.objects.filter(client=client, transaction_type='returned', billed=False)
+    returned_bottles = sum(t.bottles.count() for t in returned_transactions)    
+    pending_bottles = delivered_bottles - returned_bottles
+    price = BottlePricing.get_solo().price
+    total = delivered_bottles * price
     
     # Save bill to database
     bill = Bill.objects.create(
         client=client,
-        delivered_bottles=delivered,
-        returned_bottles=returned,
-        pending_bottles=pending,
+        delivered_bottles=delivered_count,
+        returned_bottles=returned_bottles,
+        pending_bottles=pending_bottles,
         price_per_bottle=price,
         total_amount=total,
         generated_by=request.user,
@@ -491,9 +493,9 @@ def generate_bill(request, client_id, bill_id=None):
     
     context = {
         'client': client,
-        'delivered': delivered,
-        'returned': returned,
-        'pending': pending,
+        'delivered': delivered_count,
+        'returned': returned_bottles,
+        'pending': pending_bottles,
         'price': price,
         'total': total,
         'bill': bill,

@@ -1,0 +1,35 @@
+{% comment %} Usage: {% include 'partials/bottles_photos_modal.html' with transaction=t %} {% endcomment %}
+<div class="modal fade" id="bottlesModal{{ transaction.id }}" tabindex="-1" aria-labelledby="bottlesModalLabel{{ transaction.id }}" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bottlesModalLabel{{ transaction.id }}">Bottles for Transaction #{{ transaction.id }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="list-group mb-3">
+          {% for bottle in transaction.bottles.all %}
+            <li class="list-group-item">{{ bottle.code }}</li>
+          {% empty %}
+            <li class="list-group-item">No bottles</li>
+          {% endfor %}
+        </ul>
+        <hr>
+        <h6 class="mt-3 mb-2">Photos</h6>
+        <div class="row g-2">
+          {% for photo in transaction.photos.all %}
+            <div class="col-md-3 mb-2">
+              <a href="{{ photo.image.url }}" target="_blank">
+                <img src="{{ photo.image.url }}" alt="Transaction Photo"
+                     class="img-fluid rounded border transaction-photo-thumb"
+                     style="max-height:120px; cursor:pointer;">
+              </a>
+            </div>
+          {% empty %}
+            <div class="col-12 text-muted">No photos uploaded for this transaction.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

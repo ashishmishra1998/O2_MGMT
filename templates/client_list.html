@@ -56,7 +56,7 @@
                 <th>Total Delivered</th>
                 <th>Total Returned</th>
                 <th>Total Pending</th>
-                <th>Unbilled Pending</th>
+                <th>Unbilled bottles</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -73,10 +73,10 @@
                 <td>{{ stat.delivered }}</td>
                 <td>{{ stat.returned }}</td>
                 <td>{{ stat.pending }}</td>
-                <td>{{ stat.unbilled_pending }}</td>
+                <td>{{ stat.pending_bill_bottles }}</td>
                 <td>
                     <div class="btn-group" role="group">
-                        {% if stat.unbilled_pending > 0 %}
+                        {% if stat.pending_bill_bottles > 0 %}
                             <a href="{% url 'generate_bill' stat.client.id %}" class="btn btn-sm btn-info">Auto Bill</a>
                         {% else %}
                             <button class="btn btn-sm btn-secondary" disabled>No New Transactions</button>

@@ -33,17 +33,29 @@ class AdminProfileForm(forms.ModelForm):
 class TransactionForm(forms.ModelForm):
     class Meta:
         model = Transaction
-        fields = ['client', 'bottle', 'photo', 'transaction_type']
+        fields = ['client', 'bottles', 'transaction_type']
 
     def __init__(self, *args, **kwargs):
         transaction_type = kwargs.pop('transaction_type', None)
         super().__init__(*args, **kwargs)
         if transaction_type == 'delivered':
-            self.fields['bottle'].queryset = Bottle.objects.filter(status='in_stock')
+            self.fields['bottles'].queryset = Bottle.objects.filter(status='in_stock')
         elif transaction_type == 'returned':
-            self.fields['bottle'].queryset = Bottle.objects.filter(status='delivered')
+            self.fields['bottles'].queryset = Bottle.objects.filter(status='delivered')
         else:
-            self.fields['bottle'].queryset = Bottle.objects.all() 
+            self.fields['bottles'].queryset = Bottle.objects.all()
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        bottles = cleaned_data.get('bottles')
+        photos = self.files.getlist('photos') if hasattr(self, 'files') else []
+        print(f"Number of photos uploaded: {len(photos)}")
+        print(f"Bottles selected: {bottles}")
+        if bottles and len(photos) < bottles.count():
+            raise forms.ValidationError(
+                f'You must upload at least {bottles.count()} photo(s) for the selected bottles.'
+            )
+        return cleaned_data
 
 class BottlePricingForm(forms.ModelForm):
     class Meta:

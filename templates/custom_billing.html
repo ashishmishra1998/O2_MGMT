@@ -153,10 +153,31 @@
                                             </td>
                                             <td>{{ transaction.date|time:"H:i" }}</td>
                                             <td>
-                                                <a href="{% url 'bottle_photos' transaction.bottle.code %}" 
-                                                   class="text-decoration-none">
-                                                    {{ transaction.bottle.code }}
-                                                </a>
+                                                {% with transaction.bottles.count as bottle_count %}
+                                                <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#bottlesModal{{ transaction.id }}">
+                                                    Show {{ bottle_count }} Bottle{% if bottle_count != 1 %}s{% endif %}
+                                                </button>
+                                                {% endwith %}
+                                                <!-- Modal -->
+                                                <div class="modal fade" id="bottlesModal{{ transaction.id }}" tabindex="-1" aria-labelledby="bottlesModalLabel{{ transaction.id }}" aria-hidden="true">
+                                                <div class="modal-dialog">
+                                                    <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title" id="bottlesModalLabel{{ transaction.id }}">Bottles for Transaction #{{ transaction.id }}</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <ul class="list-group">
+                                                        {% for bottle in transaction.bottles.all %}
+                                                            <li class="list-group-item">{{ bottle.code }}</li>
+                                                        {% empty %}
+                                                            <li class="list-group-item">No bottles</li>
+                                                        {% endfor %}
+                                                        </ul>
+                                                    </div>
+                                                    </div>
+                                                </div>
+                                                </div>
                                             </td>
                                             <td>
                                                 <span class="badge {% if transaction.transaction_type == 'delivered' %}bg-success{% else %}bg-warning{% endif %}">
@@ -194,6 +215,7 @@
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 function selectAll() {
     document.querySelectorAll('.transaction-checkbox').forEach(checkbox => {
@@ -245,4 +267,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 </body>
-</html> 
+</html>

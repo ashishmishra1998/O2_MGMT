@@ -64,16 +64,22 @@ class Transaction(models.Model):
         ('delivered', 'Delivered'),
         ('returned', 'Returned'),
     ]
-    bottle = models.ForeignKey(Bottle, on_delete=models.CASCADE)
+    bottles = models.ManyToManyField(Bottle)
     client = models.ForeignKey(Client, on_delete=models.CASCADE)
     date = models.DateTimeField(auto_now_add=True)
-    photo = models.ImageField(upload_to='bottle_photos/')
     delivered_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPE)
     billed = models.BooleanField(default=False)  # Track if this transaction has been billed
 
     def __str__(self):
         return f"{self.bottle} - {self.transaction_type} - {self.client}"
+
+class TransactionPhoto(models.Model):
+    transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, related_name='photos')
+    image = models.ImageField(upload_to='bottle_photos/')
+
+    def __str__(self):
+        return f"Photo for Transaction {self.transaction.id}"
 
 class Bill(models.Model):
     BILL_TYPE_CHOICES = [

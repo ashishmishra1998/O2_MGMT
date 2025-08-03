@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bottle Transaction</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 </head>
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
@@ -35,7 +36,11 @@
     {% endif %}
     <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
-        {{ form.non_field_errors }}
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+            {{ form.non_field_errors }}
+        </div>
+        {% endif %}
         <input type="hidden" name="transaction_type" value="{{ transaction_type }}">
         <div class="mb-3">
             <label class="form-label">Transaction Type</label>
@@ -47,19 +52,32 @@
             {{ form.client.errors }}
         </div>
         <div class="mb-3">
-            <label for="id_bottle" class="form-label">Bottle</label>
-            {{ form.bottle|add_class:'form-select' }}
-            {{ form.bottle.errors }}
+            <label for="id_bottle" class="form-label" multiple=multiple>Bottles</label>
+            {{ form.bottles|add_class:'form-select select2-multiple' }}
+            {{ form.bottles.errors }}
         </div>
         <div class="mb-3">
-            <label for="id_photo" class="form-label">Photo</label>
-            {{ form.photo|add_class:'form-control' }}
-            {{ form.photo.errors }}
+        <div class="mb-3">
+            <label for="photos" class="form-label">Upload Photos</label>
+            <input type="file" name="photos" id="photos" class="form-control" multiple>
         </div>
-        <button type="submit" class="btn btn-success" {% if not form.fields.bottle.queryset.exists %}disabled{% endif %}>Submit</button>
+        <button type="submit" class="btn btn-success" {% if not form.fields.bottles.queryset.exists %}disabled{% endif %}>Submit</button>
         <a href="{% url 'transaction_create' %}" class="btn btn-secondary">Back to Type Selection</a>
         <a href="{% url 'transaction_list' %}" class="btn btn-secondary">Back to List</a>
     </form>
 </div>
+<!-- jQuery (required for Select2) -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- Select2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+    $(document).ready(function() {
+        $('.select2-multiple').select2({
+            placeholder: "Select Bottles",
+            allowClear: true,
+            width: '100%'
+        });
+    });
+</script>
 </body>
 </html> 
