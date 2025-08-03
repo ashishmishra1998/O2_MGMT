@@ -27,6 +27,12 @@ class Client(models.Model):
     def __str__(self):
         return self.name
 
+class BottleCategory(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+
+    def __str__(self):
+        return self.name
+
 class Bottle(models.Model):
     STATUS_CHOICES = [
         ('in_stock', 'In Stock'),
@@ -35,6 +41,7 @@ class Bottle(models.Model):
     ]
     code = models.CharField(max_length=10, unique=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='in_stock')
+    category = models.ForeignKey(BottleCategory, on_delete=models.SET_DEFAULT, default=1)
 
     def __str__(self):
         return f"Bottle {self.code}"

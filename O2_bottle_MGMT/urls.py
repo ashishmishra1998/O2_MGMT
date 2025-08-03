@@ -44,6 +44,9 @@ urlpatterns = [
     path('bills/<int:bill_id>/delete/', views.delete_bill, name='delete_bill'),
     path('sales/', views.sales_analytics, name='sales_analytics'),
     path('admin-profile/', views.admin_profile, name='admin_profile'),
+    path('categories/', views.category_list, name='category_list'),
+    path('categories/add/', views.category_create, name='category_create'),
+    path('categories/<int:category_id>/edit/', views.category_edit, name='category_edit'),
 ]
 
 # Serve media files in development

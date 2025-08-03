@@ -1,11 +1,16 @@
 from django import forms
-from .models import Client, Transaction, Bottle, BottlePricing
+from .models import Client, Transaction, Bottle, BottlePricing, BottleCategory
 
 class AddBottlesForm(forms.Form):
     series = forms.CharField(label='Series Prefix', max_length=5, help_text='e.g. SV or AV')
     start = forms.IntegerField(label='Start Number', min_value=1)
     end = forms.IntegerField(label='End Number', min_value=1)
-
+    category = forms.ModelChoiceField(
+        queryset=BottleCategory.objects.all(),
+        label='Category',
+        empty_label="Select a Category"
+    )
+    
     def clean(self):
         cleaned_data = super().clean()
         start = cleaned_data.get('start')
@@ -61,3 +66,9 @@ class BottlePricingForm(forms.ModelForm):
     class Meta:
         model = BottlePricing
         fields = ['price'] 
+        
+
+class BottleCategoryForm(forms.ModelForm):
+    class Meta:
+        model = BottleCategory
+        fields = ['name']

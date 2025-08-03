@@ -90,6 +90,16 @@
             </select>
         </div>
         <div class="col-auto">
+            <select name="category" class="form-select">
+                <option value="">All Categories</option>
+                {% for category in categories %}
+                    <option value="{{ category.id }}" {% if selected_category == category.id|stringformat:"s" %}selected{% endif %}>
+                        {{ category.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
             <button type="submit" class="btn btn-primary">Filter/Search</button>
         </div>
     </form>
@@ -99,6 +109,7 @@
             <tr>
                 <th>Code</th>
                 <th>Status</th>
+                <th>Category</th>
                 {% if request.user.username == 'admin' %}<th>Photos</th>{% endif %}
             </tr>
         </thead>
@@ -115,6 +126,7 @@
                         <span class="badge bg-info text-dark">Returned</span>
                     {% endif %}
                 </td>
+                <td>{{ bottle.category.name }}</td>
                 {% if request.user.username == 'admin' %}
                 <td><a href="{% url 'bottle_photos' bottle.code %}" class="btn btn-sm btn-outline-info">View Photos</a></td>
                 {% endif %}

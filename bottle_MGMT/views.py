@@ -3,8 +3,8 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.http import HttpResponse
 from .models import Client
-from .forms import TransactionForm, AdminProfileForm, BottlePricingForm, ClientForm, AddBottlesForm
-from .models import Transaction, Bottle, Bill, BillTransaction, TransactionPhoto
+from .forms import TransactionForm, AdminProfileForm, BottlePricingForm, ClientForm, AddBottlesForm, BottleCategoryForm
+from .models import Transaction, Bottle, Bill, BillTransaction, TransactionPhoto, BottleCategory
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from datetime import timedelta
@@ -237,10 +237,19 @@ def inventory_view(request):
     status = request.GET.get('status', '')
     code_query = request.GET.get('q', '')
     bottles = Bottle.objects.all().order_by('code')
+    category_id = request.GET.get('category', '')
+
+
     if status:
         bottles = bottles.filter(status=status)
     if code_query:
         bottles = bottles.filter(code__icontains=code_query)
+    
+    if category_id: 
+        bottles = bottles.filter(category_id=category_id)
+    
+    categories = BottleCategory.objects.all()
+
     total = bottles.count()
     in_stock = bottles.filter(status='in_stock').count()
     delivered = bottles.filter(status='delivered').count()
@@ -253,6 +262,8 @@ def inventory_view(request):
         'returned': returned,
         'status': status,
         'code_query': code_query,
+        'categories': categories,
+        'selected_category': category_id,
     })
 
 @staff_member_required
@@ -268,7 +279,8 @@ def add_bottles_view(request):
             for i in range(start, end + 1):
                 code = f"{series}-{i}"
                 if not Bottle.objects.filter(code=code).exists():
-                    Bottle.objects.create(code=code, status='in_stock')
+                    category = form.cleaned_data['category']
+                    Bottle.objects.create(code=code, status='in_stock', category=category)
                     created += 1
                 else:
                     duplicates.append(code)
@@ -792,3 +804,32 @@ def admin_profile(request):
     else:
         form = AdminProfileForm(instance=admin_client)
     return render(request, 'admin_profile.html', {'form': form})
+
+
+@staff_member_required
+def category_list(request):
+    categories = BottleCategory.objects.all()
+    return render(request, 'category_list.html', {'categories': categories})
+
+@staff_member_required
+def category_create(request):
+    if request.method == 'POST':
+        form = BottleCategoryForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('category_list')
+    else:
+        form = BottleCategoryForm()
+    return render(request, 'category_form.html', {'form': form})
+
+@staff_member_required
+def category_edit(request, category_id):
+    category = BottleCategory.objects.get(id=category_id)
+    if request.method == 'POST':
+        form = BottleCategoryForm(request.POST, instance=category)
+        if form.is_valid():
+            form.save()
+            return redirect('category_list')
+    else:
+        form = BottleCategoryForm(instance=category)
+    return render(request, 'category_form.html', {'form': form, 'edit': True, 'category': category})
