@@ -1,27 +1,10 @@
+
+{% extends "base.html" %}
 {% load widget_tweaks %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bill History - {{ client.name }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="#">O2 Bottles MGMT</a>
-        <div class="collapse navbar-collapse">
-            <ul class="navbar-nav ms-auto">
-                <li class="nav-item"><a class="nav-link" href="{% url 'admin_dashboard' %}">Dashboard</a></li>
-                <li class="nav-item"><a class="nav-link" href="{% url 'client_list' %}">Clients</a></li>
-                <li class="nav-item"><a class="nav-link active" href="{% url 'bill_history' client.id %}">Bill History</a></li>
-                <li class="nav-item"><a class="nav-link" href="{% url 'logout' %}">Logout</a></li>
-            </ul>
-        </div>
-    </div>
-</nav>
-<div class="container mt-5">
+{% block title %}Bill History - {{ client.name }}{% endblock %}
+
+{% block content %}
+
     <h2>Bill History for {{ client.name }}</h2>
     <div class="mb-3">
         <strong>Contact:</strong> {{ client.contact }} | 
@@ -100,6 +83,4 @@
         <a href="{% url 'custom_billing' client.id %}" class="btn btn-primary">Custom Billing</a>
         <a href="{% url 'client_list' %}" class="btn btn-secondary">Back to Clients</a>
     </div>
-</div>
-</body>
-</html> 
+{% endblock %}
