@@ -83,7 +83,7 @@
                 <th>Code</th>
                 <th>Status</th>
                 <th>Category</th>
-                {% if request.user.username == 'admin' %}<th>Photos</th>{% endif %}
+                {% comment %} {% if request.user.username == 'admin' %}<th>Photos</th>{% endif %} {% endcomment %}
             </tr>
         </thead>
         <tbody>
@@ -100,9 +100,9 @@
                     {% endif %}
                 </td>
                 <td>{{ bottle.category.name }}</td>
-                {% if request.user.username == 'admin' %}
+                {% comment %} {% if request.user.username == 'admin' %}
                 <td><a href="{% url 'bottle_photos' bottle.code %}" class="btn btn-sm btn-outline-info">View Photos</a></td>
-                {% endif %}
+                {% endif %} {% endcomment %}
             </tr>
             {% empty %}
             <tr>
