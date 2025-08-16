@@ -655,23 +655,37 @@ def sales_analytics(request):
     def get_sales_data(bills_qs):
         total_bills = bills_qs.count()
         total_amount = bills_qs.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        total_bottles_delivered = bills_qs.aggregate(Sum('delivered_bottles'))['delivered_bottles__sum'] or 0
-        total_bottles_returned = bills_qs.aggregate(Sum('returned_bottles'))['returned_bottles__sum'] or 0
-        total_pending_bottles = bills_qs.aggregate(Sum('pending_bottles'))['pending_bottles__sum'] or 0
+        
+        # Fetch transactions linked to these bills
+        transactions = Transaction.objects.filter(
+            bill_transactions__bill__in=bills_qs
+        ).prefetch_related('bottles')
+
+        # Bottle counts
+        delivered_bottles = sum(
+            t.bottles.count() for t in transactions if t.transaction_type == 'delivered'
+        )
+        returned_bottles = sum(
+            t.bottles.count() for t in transactions if t.transaction_type == 'returned'
+        )
+        pending_bottles = delivered_bottles - returned_bottles
+
+        # Payment info (still from Bill)
         paid_bills = bills_qs.filter(paid=True)
         paid_amount = paid_bills.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
         unpaid_amount = total_amount - paid_amount
-        
+
         return {
             'total_bills': total_bills,
             'total_amount': total_amount,
-            'total_bottles_delivered': total_bottles_delivered,
-            'total_bottles_returned': total_bottles_returned,
-            'total_pending_bottles': total_pending_bottles,
+            'total_bottles_delivered': delivered_bottles,
+            'total_bottles_returned': returned_bottles,
+            'total_pending_bottles': pending_bottles,
             'paid_amount': paid_amount,
             'unpaid_amount': unpaid_amount,
             'payment_rate': (paid_amount / total_amount * 100) if total_amount > 0 else 0
         }
+
     
     # Daily, Weekly, Monthly, Yearly sales
     daily_sales = get_sales_data(all_bills.filter(bill_date__date=today))
@@ -700,9 +714,18 @@ def sales_analytics(request):
     clients = Client.objects.all()
     for client in clients:
         client_bills = all_bills.filter(client=client)
-        total_delivered = client_bills.aggregate(Sum('delivered_bottles'))['delivered_bottles__sum'] or 0
-        total_returned = client_bills.aggregate(Sum('returned_bottles'))['returned_bottles__sum'] or 0
+        transactions = Transaction.objects.filter(
+            bill_transactions__bill__in=client_bills
+        ).prefetch_related('bottles')
+
+        total_delivered = sum(
+            t.bottles.count() for t in transactions if t.transaction_type == 'delivered'
+        )
+        total_returned = sum(
+            t.bottles.count() for t in transactions if t.transaction_type == 'returned'
+        )
         total_pending = total_delivered - total_returned
+        
         total_amount = client_bills.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
         paid_amount = client_bills.filter(paid=True).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
         unpaid_amount = total_amount - paid_amount
@@ -717,7 +740,7 @@ def sales_analytics(request):
             'unpaid_amount': unpaid_amount,
             'payment_rate': (paid_amount / total_amount * 100) if total_amount > 0 else 0
         })
-    
+
     # Sort clients by total amount (highest first)
     client_analytics.sort(key=lambda x: x['total_amount'], reverse=True)
     
@@ -726,14 +749,21 @@ def sales_analytics(request):
     for month in range(1, 13):
         month_start = datetime(selected_year, month, 1).date()
         month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        
         month_bills = all_bills.filter(bill_date__date__range=[month_start, month_end])
+        transactions = Transaction.objects.filter(
+            bill_transactions__bill__in=month_bills
+        ).prefetch_related('bottles')
+
         month_amount = month_bills.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        month_bottles = month_bills.aggregate(Sum('delivered_bottles'))['delivered_bottles__sum'] or 0
+        month_bottles = sum(t.bottles.count() for t in transactions if t.transaction_type == 'delivered')
+
         monthly_trend.append({
             'month': calendar.month_name[month],
             'amount': month_amount,
             'bottles': month_bottles
         })
+
     
     # Recent transactions
     recent_bills = all_bills.order_by('-bill_date')[:10]
