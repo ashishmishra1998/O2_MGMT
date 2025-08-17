@@ -14,23 +14,30 @@
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container-fluid">
         <a class="navbar-brand" href="#">O2 Bottles MGMT</a>
-        <div class="collapse navbar-collapse">
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav ms-auto">
                 {% if request.user.username == 'admin' %}
                 <li class="nav-item"><a class="nav-link active" href="{% url 'admin_dashboard' %}">Dashboard</a></li>
                 <li class="nav-item"><a class="nav-link" href="{% url 'admin_profile' %}">Profile</a></li>
-
-                {% else %}
-                <li class="nav-item"><a class="nav-link active" href="{% url 'delivery_dashboard' %}">Dashboard</a></li>
-                {% endif %}
-                <li class="nav-item"><a class="nav-link" href="{% url 'client_list' %}">Clients</a></li>
-                <li class="nav-item"><a class="nav-link" href="{% url 'transaction_list' %}">Transactions</a></li>
                 <li class="nav-item"><a class="nav-link" href="{% url 'inventory' %}">Inventory</a></li>
                 <li class="nav-item"><a class="nav-link" href="{% url 'category_list' %}">Bottle Category</a></li>
                 <li class="nav-item"><a class="nav-link" href="{% url 'pricing' %}">Pricing</a></li>
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'sales_analytics' %}">Sales Analytics</a>
                 </li>
+                {% else %}
+                <li class="nav-item"><a class="nav-link active" href="{% url 'delivery_dashboard' %}">Dashboard</a></li>
+                {% endif %}
+                <li class="nav-item"><a class="nav-link" href="{% url 'client_list' %}">Clients</a></li>
+                <li class="nav-item"><a class="nav-link" href="{% url 'transaction_list' %}">Transactions</a></li>
+
+
                 {% if request.user.username == 'admin' %}
                 <li class="nav-item"><a class="nav-link" href="{% url 'reports' %}">Reports</a></li>
                 {% endif %}
