@@ -126,7 +126,7 @@
                                         {% for transaction in transactions %}
                                         <tr class="{% if transaction.id in custom_billed_transactions %}table-secondary{% endif %}">
                                             <td>
-                                                {% if transaction.id not in custom_billed_transactions %}
+                                                {% if transaction.id not in custom_billed_transactions and not transaction.billed %}
                                                 <input type="checkbox" class="form-check-input transaction-checkbox" 
                                                        name="selected_transactions" value="{{ transaction.id }}"
                                                        data-date="{{ date }}" onchange="updateCreateButton()">
