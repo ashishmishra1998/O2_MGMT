@@ -52,18 +52,6 @@ class TransactionForm(forms.ModelForm):
             self.fields['bottles'].queryset = Bottle.objects.filter(status='delivered')
         else:
             self.fields['bottles'].queryset = Bottle.objects.all()
-    
-    def clean(self):
-        cleaned_data = super().clean()
-        bottles = cleaned_data.get('bottles')
-        photos = self.files.getlist('photos') if hasattr(self, 'files') else []
-        print(f"Number of photos uploaded: {len(photos)}")
-        print(f"Bottles selected: {bottles}")
-        if bottles and len(photos) < bottles.count():
-            raise forms.ValidationError(
-                f'You must upload at least {bottles.count()} photo(s) for the selected bottles.'
-            )
-        return cleaned_data
 
 class BottlePricingForm(forms.ModelForm):
     class Meta:
