@@ -22,11 +22,18 @@ class Client(models.Model):
     owner_gst = models.CharField(max_length=20, blank=True, null=True)
     bank_account = models.CharField(max_length=50, blank=True, null=True)
     card = models.CharField(max_length=50, blank=True, null=True)
-
-
+    account_holder = models.CharField(max_length=100, blank=True, null=True)
+    account_number = models.CharField(max_length=30, blank=True, null=True)
+    ifsc = models.CharField(max_length=15, blank=True, null=True)
+    branch = models.CharField(max_length=100, blank=True, null=True)
+    account_type = models.CharField(max_length=20, blank=True, null=True)
+    mmid = models.CharField(max_length=20, blank=True, null=True)
+    vpa = models.CharField("Virtual Payment Address", max_length=100, blank=True, null=True)
+    upi_number = models.CharField(max_length=15, blank=True, null=True)
+    upi_qr = models.ImageField(upload_to="upi_qr/", blank=True, null=True)
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.role})"
 
 class BottleCategory(models.Model):
     name = models.CharField(max_length=50, unique=True)

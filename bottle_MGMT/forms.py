@@ -27,14 +27,17 @@ class ClientForm(forms.ModelForm):
 class AdminProfileForm(forms.ModelForm):
     class Meta:
         model = Client
-        fields = ['owner_gst', 'bank_account', 'card', 'contact']
+        fields = [
+            'owner_gst', 'account_holder', 'account_number', 'ifsc', 'branch',
+            'account_type', 'mmid', 'vpa', 'upi_number', 'upi_qr',
+            'contact'
+        ]
 
     def clean_contact(self):
         contact = self.cleaned_data['contact']
         if not contact.isdigit() or len(contact) != 10:
             raise forms.ValidationError('Contact number must be exactly 10 digits.')
-        return contact 
-
+        return contact
 class TransactionForm(forms.ModelForm):
     class Meta:
         model = Transaction

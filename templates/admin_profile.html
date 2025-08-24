@@ -3,30 +3,63 @@
 {% block title %}Admin Profile{% endblock %}
 
 {% block content %}
+<h2>Admin Profile</h2>
+<form method="post" enctype="multipart/form-data" class="mt-4">  <!-- 👈 added enctype -->
+    {% csrf_token %}
+    {{ form.non_field_errors }}
 
-<body>
-    <h2>Admin Profile</h2>
-    <form method="post" class="mt-4">
-        {% csrf_token %}
-        {{ form.non_field_errors }}
-        <div class="mb-3">
-            <label for="id_owner_gst" class="form-label">Owner GST</label>
-            {{ form.owner_gst|add_class:'form-control' }}
-        </div>
-        <div class="mb-3">
-            <label for="id_bank_account" class="form-label">Bank Account</label>
-            {{ form.bank_account|add_class:'form-control' }}
-        </div>
-        <div class="mb-3">
-            <label for="id_card" class="form-label">Card</label>
-            {{ form.card|add_class:'form-control' }}
-        </div>
-        <div class="mb-3">
-            <label for="id_contact" class="form-label">Mobile Number</label>
-            {{ form.contact|add_class:'form-control' }}
-        </div>
-        <button type="submit" class="btn btn-success">Save Profile</button>
-    </form>
-</body>
-</html>
+    <div class="mb-3">
+        <label for="id_owner_gst" class="form-label">Owner GST</label>
+        {{ form.owner_gst|add_class:'form-control' }}
+    </div>
+
+    <div class="mb-3">
+        <label for="id_account_holder" class="form-label">Account Holder</label>
+        {{ form.account_holder|add_class:'form-control' }}
+    </div>
+    <div class="mb-3">
+        <label for="id_account_number" class="form-label">Account Number</label>
+        {{ form.account_number|add_class:'form-control' }}
+    </div>
+    <div class="mb-3">
+        <label for="id_ifsc" class="form-label">IFSC</label>
+        {{ form.ifsc|add_class:'form-control' }}
+    </div>
+    <div class="mb-3">
+        <label for="id_branch" class="form-label">Branch</label>
+        {{ form.branch|add_class:'form-control' }}
+    </div>
+    <div class="mb-3">
+        <label for="id_account_type" class="form-label">Account Type</label>
+        {{ form.account_type|add_class:'form-control' }}
+    </div>
+    <div class="mb-3">
+        <label for="id_mmid" class="form-label">MMID</label>
+        {{ form.mmid|add_class:'form-control' }}
+    </div>
+    <div class="mb-3">
+        <label for="id_vpa" class="form-label">Virtual Payment Address</label>
+        {{ form.vpa|add_class:'form-control' }}
+    </div>
+    <div class="mb-3">
+        <label for="id_upi_number" class="form-label">UPI Number</label>
+        {{ form.upi_number|add_class:'form-control' }}
+    </div>
+    <div class="mb-3">
+        <label for="id_upi_qr" class="form-label">UPI QR Code</label><br>
+        {{ form.upi_qr }}
+        {% if form.instance.upi_qr %}
+            <div class="mt-2">
+                <img src="{{ form.instance.upi_qr.url }}" alt="UPI QR" width="150">
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="mb-3">
+        <label for="id_contact" class="form-label">Mobile Number</label>
+        {{ form.contact|add_class:'form-control' }}
+    </div>
+
+    <button type="submit" class="btn btn-success">Save Profile</button>
+</form>
 {% endblock %}

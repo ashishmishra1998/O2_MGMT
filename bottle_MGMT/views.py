@@ -16,6 +16,8 @@ from .models import BottlePricing
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.lib.utils import ImageReader
 from io import BytesIO
 from django.db.models import Q
 from datetime import datetime
@@ -486,7 +488,8 @@ def create_custom_bill(request, client_id):
 def generate_bill(request, client_id, bill_id=None):
     """Generate bill - modified to handle both auto and custom bills"""
     client = get_object_or_404(Client, id=client_id)
-    
+    admin_client = Client.objects.filter(role='admin').first()
+
     if bill_id:
         bill = get_object_or_404(Bill, id=bill_id, client=client)
         context = {
@@ -501,6 +504,7 @@ def generate_bill(request, client_id, bill_id=None):
             'is_custom': bill.bill_type == 'custom',
             'discount': bill.discount_percentage,
             'final_amount': bill.final_amount,
+            'admin_client': admin_client,  # pass admin details
         }
         if request.GET.get('format') == 'pdf':
             return generate_pdf_bill(request, context)
@@ -599,6 +603,7 @@ def generate_bill(request, client_id, bill_id=None):
         'is_custom': False,
         'discount': bill.discount_percentage,
         'final_amount': bill.final_amount,
+        'admin_client': admin_client,  # pass admin details
     }
     if request.GET.get('format') == 'pdf':
         return generate_pdf_bill(request, context)
@@ -609,6 +614,7 @@ def _fmt_money(val):
         return f"₹{Decimal(val):.2f}"
     except Exception:
         return f"₹{val}"
+
 
 def generate_pdf_bill(request, context):
     buffer = BytesIO()
@@ -621,55 +627,122 @@ def generate_pdf_bill(request, context):
     p.setFont("Helvetica", 12)
 
     # Header
-    p.drawString(1*inch, 10*inch, "O2 Bottle Management System")
-    p.drawString(1*inch, 9.5*inch, "Bill")
+    p.drawString(1 * inch, 10 * inch, "O2 Bottle Management System")
+    p.drawString(1 * inch, 9.5 * inch, "Bill")
 
     # Client
     client = context["client"]
-    p.drawString(1*inch, 9*inch, f"Client: {client.name}")
-    p.drawString(1*inch, 8.5*inch, f"Address: {client.address}")
-    p.drawString(1*inch, 8*inch, f"Contact: {client.contact}")
-    if getattr(client, 'gst_number', None):
-        p.drawString(1*inch, 7.75*inch, f"GSTIN: {client.gst_number}")
+    p.drawString(1 * inch, 9 * inch, f"Client: {client.name}")
+    p.drawString(1 * inch, 8.5 * inch, f"Address: {client.address}")
+    p.drawString(1 * inch, 8 * inch, f"Contact: {client.contact}")
+    if getattr(client, "gst_number", None):
+        p.drawString(1 * inch, 7.75 * inch, f"GSTIN: {client.gst_number}")
 
     bill = context["bill"]
 
     # Bill details
-    y = 7.2*inch
-    p.drawString(1*inch, y, f"Bill Date: {context['bill_date'].strftime('%Y-%m-%d')}")
-    y -= 0.3*inch
-    p.drawString(1*inch, y, f"Bottles Delivered: {bill.delivered_bottles}")
-    y -= 0.3*inch
-    p.drawString(1*inch, y, f"Price per Bottle: {_fmt_money(bill.price_per_bottle)}")
+    y = 7.2 * inch
+    p.drawString(1 * inch, y, f"Bill Date: {context['bill_date'].strftime('%Y-%m-%d')}")
+    y -= 0.3 * inch
+    p.drawString(1 * inch, y, f"Bottles Delivered: {bill.delivered_bottles}")
+    y -= 0.3 * inch
+    p.drawString(1 * inch, y, f"Price per Bottle: {_fmt_money(bill.price_per_bottle)}")
 
     # Amounts
-    subtotal = getattr(bill, 'subtotal_amount', context.get('total'))
-    discount_pct = getattr(bill, 'discount_percentage', Decimal('0'))
-    discount_amount = getattr(bill, 'discount_amount', Decimal('0'))
-    taxable = getattr(bill, 'taxable_amount', subtotal)
-    gst_pct = getattr(bill, 'gst_percentage', Decimal('18'))
-    gst_amount = getattr(bill, 'gst_amount', Decimal('0'))
-    final_amount = getattr(bill, 'final_amount', subtotal)
+    subtotal = getattr(bill, "subtotal_amount", context.get("total"))
+    discount_pct = getattr(bill, "discount_percentage", Decimal("0"))
+    discount_amount = getattr(bill, "discount_amount", Decimal("0"))
+    taxable = getattr(bill, "taxable_amount", subtotal)
+    gst_pct = getattr(bill, "gst_percentage", Decimal("18"))
+    gst_amount = getattr(bill, "gst_amount", Decimal("0"))
+    final_amount = getattr(bill, "final_amount", subtotal)
 
-    y -= 0.45*inch
-    p.drawString(1*inch, y, f"Subtotal: {_fmt_money(subtotal)}")
-    y -= 0.3*inch
+    y -= 0.45 * inch
+    p.drawString(1 * inch, y, f"Subtotal: {_fmt_money(subtotal)}")
+    y -= 0.3 * inch
     if discount_pct and discount_pct != 0:
-        p.drawString(1*inch, y, f"Discount ({discount_pct}%): -{_fmt_money(discount_amount)}")
-        y -= 0.3*inch
-    p.drawString(1*inch, y, f"Taxable Value: {_fmt_money(taxable)}")
-    y -= 0.3*inch
-    p.drawString(1*inch, y, f"GST ({gst_pct}%): {_fmt_money(gst_amount)}")
-    y -= 0.3*inch
-    p.drawString(1*inch, y, f"Final Payable: {_fmt_money(final_amount)}")
-    y -= 0.45*inch
+        p.drawString(1 * inch, y, f"Discount ({discount_pct}%): -{_fmt_money(discount_amount)}")
+        y -= 0.3 * inch
+    p.drawString(1 * inch, y, f"Taxable Value: {_fmt_money(taxable)}")
+    y -= 0.3 * inch
+    p.drawString(1 * inch, y, f"GST ({gst_pct}%): {_fmt_money(gst_amount)}")
+    y -= 0.3 * inch
+    p.drawString(1 * inch, y, f"Final Payable: {_fmt_money(final_amount)}")
+    y -= 0.45 * inch
 
-    p.drawString(1*inch, y, f"Generated by: {bill.generated_by.username}")
+    p.drawString(1 * inch, y, f"Generated by: {bill.generated_by.username}")
+    y -= 0.6 * inch
+
+    # ---------------- Payment Details Section ----------------
+    admin_client = context.get("admin_client")
+    if admin_client:
+        p.setFont("Helvetica-Bold", 12)
+        p.setFillColor(colors.white)
+        p.setStrokeColor(colors.black)
+
+        # Card header
+        p.setFillColor(colors.grey)
+        p.rect(1 * inch, y - 0.3 * inch, 6 * inch, 0.35 * inch, fill=1)
+        p.setFillColor(colors.white)
+        p.drawCentredString(4 * inch, y - 0.1 * inch, "Payment Details")
+
+        # Reset font for details
+        y -= 0.6 * inch
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.black)
+
+        # Left column: Bank details
+        left_x = 1.1 * inch
+        right_x = 3.8 * inch
+        col_y = y
+
+        p.setFillColor(colors.blue)
+        p.drawString(left_x, col_y, "Bank Transfer")
+        p.setFillColor(colors.black)
+        col_y -= 0.2 * inch
+        p.drawString(left_x, col_y, f"Account Holder: {admin_client.account_holder}")
+        col_y -= 0.2 * inch
+        p.drawString(left_x, col_y, f"Account No: {admin_client.account_number}")
+        col_y -= 0.2 * inch
+        p.drawString(left_x, col_y, f"IFSC: {admin_client.ifsc}")
+        col_y -= 0.2 * inch
+        p.drawString(left_x, col_y, f"Branch: {admin_client.branch}")
+        col_y -= 0.2 * inch
+        p.drawString(left_x, col_y, f"Type: {admin_client.account_type}")
+
+        # Right column: UPI
+        upi_y = y
+        p.setFillColor(colors.green)
+        p.drawString(right_x, upi_y, "UPI Payment")
+        p.setFillColor(colors.black)
+        upi_y -= 0.2 * inch
+        if getattr(admin_client, "vpa", None):
+            p.drawString(right_x, upi_y, f"VPA: {admin_client.vpa}")
+            upi_y -= 0.2 * inch
+        if getattr(admin_client, "upi_number", None):
+            p.drawString(right_x, upi_y, f"UPI No: {admin_client.upi_number}")
+            upi_y -= 0.3 * inch
+
+        # QR code (resize ~120px)
+        if getattr(admin_client, "upi_qr", None):
+            try:
+                qr_path = admin_client.upi_qr.path
+                qr_img = ImageReader(qr_path)
+                p.drawImage(qr_img, right_x, upi_y - 1.2 * inch, width=1.2 * inch, height=1.2 * inch, preserveAspectRatio=True)
+                p.setFont("Helvetica-Oblique", 8)
+                p.drawCentredString(right_x + 0.6 * inch, upi_y - 1.3 * inch, "Scan & Pay")
+                p.setFont("Helvetica", 10)
+            except Exception as e:
+                p.drawString(right_x, upi_y, "[QR Code Missing]")
+
+    # ----------------------------------------------------------
 
     p.save()
     buffer.seek(0)
-    response = HttpResponse(buffer, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="bill_{client.name}_{context['bill_date'].strftime('%Y%m%d')}.pdf"'
+    response = HttpResponse(buffer, content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f"attachment; filename=\"bill_{client.name}_{context['bill_date'].strftime('%Y%m%d')}.pdf\""
+    )
     return response
 
 @staff_member_required
@@ -931,14 +1004,18 @@ def debug_photos(request):
 
 @login_required
 def admin_profile(request):
-    admin_client, created = Client.objects.get_or_create(role='admin', defaults={'name': 'Admin'})
+    admin_client, created = Client.objects.get_or_create(
+        role='admin',
+        defaults={'name': 'Admin'}
+    )
     if request.method == 'POST':
-        form = AdminProfileForm(request.POST, instance=admin_client)
+        form = AdminProfileForm(request.POST, request.FILES, instance=admin_client)  # 👈 added request.FILES
         if form.is_valid():
             form.save()
             return redirect('admin_profile')
     else:
         form = AdminProfileForm(instance=admin_client)
+
     return render(request, 'admin_profile.html', {'form': form})
 
 
