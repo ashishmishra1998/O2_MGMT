@@ -37,9 +37,29 @@
             <th>Price per Bottle</th>
             <td>₹{{ price }}</td>
         </tr>
+        <tr>
+            <th>Subtotal</th>
+            <td>₹{{ bill.subtotal_amount|default:total|floatformat:2 }}</td>
+        </tr>
+
+        {% if bill.discount_percentage and bill.discount_percentage|floatformat:2 != '0.00' %}
+        <tr>
+            <th>Discount</th>
+            <td>{{ bill.discount_percentage }}% (₹{{ bill.discount_amount|floatformat:2 }})</td>
+        </tr>
+        {% endif %}
+
+        <tr>
+            <th>Taxable Value</th>
+            <td>₹{{ bill.taxable_amount|default:total|floatformat:2 }}</td>
+        </tr>
+        <tr>
+            <th>GST</th>
+            <td>{{ bill.gst_percentage|default:"18" }}% (₹{{ bill.gst_amount|floatformat:2 }})</td>
+        </tr>
         <tr class="table-success">
-            <th>Total Amount</th>
-            <td><strong>₹{{ total }}</strong></td>
+            <th>Final Payable</th>
+            <td><strong>₹{{ bill.final_amount|default:total|floatformat:2 }}</strong></td>
         </tr>
     </table>
     <div class="mt-3">

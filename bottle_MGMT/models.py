@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from decimal import Decimal
 
 # Create your models here.
 
@@ -98,8 +99,17 @@ class Bill(models.Model):
     delivered_bottles = models.IntegerField()
     returned_bottles = models.IntegerField()
     pending_bottles = models.IntegerField()
-    price_per_bottle = models.DecimalField(max_digits=10, decimal_places=2)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    price_per_bottle = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    subtotal_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    taxable_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    gst_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('18.00'))
+    gst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    final_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    
     generated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     paid = models.BooleanField(default=False)
     paid_date = models.DateTimeField(null=True, blank=True)
