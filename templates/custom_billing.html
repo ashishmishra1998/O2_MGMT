@@ -83,7 +83,16 @@
                             <textarea class="form-control" id="description" name="description" rows="2" 
                                       placeholder="Enter a description for this custom bill..."></textarea>
                         </div>
-
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label for="discount" class="form-label">Discount (%)</label>
+                                <input type="number" min="0" max="100" step="0.01" name="discount" id="discount" class="form-control" placeholder="0">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="gst" class="form-label">GST (%)</label>
+                                <input type="number" min="0" max="100" step="0.01" name="gst" id="gst" class="form-control" value="18">
+                            </div>
+                        </div>
                         <button type="submit" class="btn btn-success" id="create-bill-btn" disabled>
                             Create Custom Bill
                         </button>
@@ -117,7 +126,7 @@
                                         {% for transaction in transactions %}
                                         <tr class="{% if transaction.id in custom_billed_transactions %}table-secondary{% endif %}">
                                             <td>
-                                                {% if transaction.id not in custom_billed_transactions %}
+                                                {% if transaction.id not in custom_billed_transactions and not transaction.billed %}
                                                 <input type="checkbox" class="form-check-input transaction-checkbox" 
                                                        name="selected_transactions" value="{{ transaction.id }}"
                                                        data-date="{{ date }}" onchange="updateCreateButton()">

@@ -16,9 +16,13 @@ from .models import BottlePricing
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.lib.utils import ImageReader
 from io import BytesIO
 from django.db.models import Q
 from datetime import datetime
+from decimal import Decimal
+from .utils import compute_totals
 
 # Ensure admin and delivery boy users exist
 ADMIN_USERNAME = 'admin'
@@ -312,6 +316,25 @@ def pricing_view(request):
         form = BottlePricingForm(instance=pricing)
     return render(request, 'pricing.html', {'form': form, 'pricing': pricing})
 
+def calculate_bill(total_amount, discount_percentage=Decimal("0"), gst_percentage=Decimal("18")):
+    """
+    Calculate discount, GST, and final amount.
+    Returns dictionary with breakdown.
+    """
+    discount_amount = (total_amount * discount_percentage / Decimal("100")).quantize(Decimal("0.01"))
+    subtotal_after_discount = total_amount - discount_amount
+
+    gst_amount = (subtotal_after_discount * gst_percentage / Decimal("100")).quantize(Decimal("0.01"))
+    final_amount = subtotal_after_discount + gst_amount
+
+    return {
+        "discount_percentage": discount_percentage,
+        "discount_amount": discount_amount,
+        "gst_percentage": gst_percentage,
+        "gst_amount": gst_amount,
+        "final_amount": final_amount,
+    }
+    
 @staff_member_required
 def custom_billing_view(request, client_id):
     """View client transactions for custom billing"""
@@ -376,42 +399,56 @@ def custom_billing_view(request, client_id):
 
 @staff_member_required
 def create_custom_bill(request, client_id):
-    """Create a custom bill with selected transactions"""
     if request.method != 'POST':
         return redirect('custom_billing', client_id=client_id)
-    
+
     client = get_object_or_404(Client, id=client_id)
     selected_transaction_ids = request.POST.getlist('selected_transactions')
-    
+
     if not selected_transaction_ids:
         messages.error(request, 'Please select at least one transaction to bill.')
         return redirect('custom_billing', client_id=client_id)
-    
-    # Get selected transactions
+
+    # Parse discount/gst (safe defaults)
+    try:
+        discount_percentage = Decimal(request.POST.get('discount', '0').strip() or '0')
+        gst_percentage = Decimal(request.POST.get('gst', '18').strip() or '18')
+    except Exception:
+        messages.error(request, 'Invalid discount or GST value.')
+        return redirect('custom_billing', client_id=client_id)
+
+    # Selected transactions
     selected_transactions = Transaction.objects.filter(
-        id__in=selected_transaction_ids,
-        client=client
+        id__in=selected_transaction_ids, client=client
     )
-    
-    # Check if any transactions are already custom billed
+
+    # Prevent double custom-billing
     custom_billed_transactions = set()
     custom_bills = Bill.objects.filter(client=client, bill_type='custom')
     for bill in custom_bills:
         custom_billed_transactions.update(
             bill.bill_transactions.values_list('transaction_id', flat=True)
         )
-    
     already_billed = [t for t in selected_transactions if t.id in custom_billed_transactions]
     if already_billed:
-        messages.error(request, f'Some transactions are already custom billed: {", ".join([str(t.id) for t in already_billed])}')
+        messages.error(
+            request,
+            f'Some transactions are already custom billed: {", ".join([str(t.id) for t in already_billed])}'
+        )
         return redirect('custom_billing', client_id=client_id)
-    
-    # Calculate bill amounts
+
+    # Quantities & price
     total_bottles_delivered = sum(t.bottles.count() for t in selected_transactions)
-    price = BottlePricing.get_solo().price
-    total_amount = total_bottles_delivered * price
-    
-    
+    price = BottlePricing.get_solo().price  # Decimal
+
+    # Totals (GST on taxable)
+    totals = compute_totals(
+        quantity=total_bottles_delivered,
+        price_per_bottle=price,
+        discount_pct=discount_percentage,
+        gst_pct=gst_percentage
+    )
+
     # Create custom bill
     bill = Bill.objects.create(
         client=client,
@@ -419,34 +456,41 @@ def create_custom_bill(request, client_id):
         returned_bottles=0,
         pending_bottles=total_bottles_delivered,
         price_per_bottle=price,
-        total_amount=total_amount,
+
+        # legacy subtotal
+        total_amount=totals['subtotal'],
+
+        # normalized
+        subtotal_amount=totals['subtotal'],
+        discount_percentage=totals['discount_pct'],
+        discount_amount=totals['discount_amount'],
+        taxable_amount=totals['taxable'],
+        gst_percentage=totals['gst_pct'],
+        gst_amount=totals['gst_amount'],
+        final_amount=totals['final'],
+
         generated_by=request.user,
         bill_type='custom',
         description=request.POST.get('description', 'Custom bill for selected transactions')
     )
-    
-    # Create BillTransaction records
-    bill_transactions = []
-    for transaction in selected_transactions:
-        bill_transactions.append(BillTransaction(bill=bill, transaction=transaction))
-    
+
+    # Link transactions
+    bill_transactions = [BillTransaction(bill=bill, transaction=txn) for txn in selected_transactions]
     BillTransaction.objects.bulk_create(bill_transactions)
-    
-    # Mark transactions as billed
+
+    # Mark as billed
     selected_transactions.update(billed=True)
-    
+
     messages.success(request, f'Custom bill created successfully for {total_bottles_delivered} bottles.')
-    
-    # Redirect to bill view
     return redirect('generate_bill', client_id=client_id, bill_id=bill.id)
 
 @staff_member_required
 def generate_bill(request, client_id, bill_id=None):
     """Generate bill - modified to handle both auto and custom bills"""
     client = get_object_or_404(Client, id=client_id)
-    
+    admin_client = Client.objects.filter(role='admin').first()
+
     if bill_id:
-        # Show specific bill (custom or auto)
         bill = get_object_or_404(Bill, id=bill_id, client=client)
         context = {
             'client': client,
@@ -454,116 +498,251 @@ def generate_bill(request, client_id, bill_id=None):
             'returned': bill.returned_bottles,
             'pending': bill.pending_bottles,
             'price': bill.price_per_bottle,
-            'total': bill.total_amount,
+            'total': bill.total_amount,  # legacy subtotal
             'bill': bill,
             'bill_date': bill.bill_date,
             'is_custom': bill.bill_type == 'custom',
+            'discount': bill.discount_percentage,
+            'final_amount': bill.final_amount,
+            'admin_client': admin_client,  # pass admin details
         }
-        
-        # Check if PDF export is requested
         if request.GET.get('format') == 'pdf':
             return generate_pdf_bill(request, context)
-        
         return render(request, 'generate_bill.html', context)
+
+    if request.method != 'POST':
+        prefill_discount = request.GET.get('discount', '')
+        prefill_gst = request.GET.get('gst', '18')
+        return render(request, "ask_discount.html", {
+            'client': client,
+            'prefill_discount': prefill_discount,
+            'prefill_gst': prefill_gst
+        })
+        
+    try:
+        discount_percentage = Decimal(request.POST.get("discount", "0").strip() or "0")
+    except Exception:
+        messages.error(request, "Invalid discount value.")
+        return redirect('generate_bill', client_id=client.id)
+
+    try:
+        gst_percentage = Decimal(request.POST.get("gst", "18").strip() or "18")
+    except Exception:
+        messages.error(request, "Invalid GST value.")
+        return redirect('generate_bill', client_id=client.id)
     
     # Original automated billing logic
-    delivered_transactions = Transaction.objects.filter(
+    delivered_txns = Transaction.objects.filter(
         client=client, transaction_type='delivered', billed=False
     )
-    delivered_count = delivered_transactions.count()
-    delivered_bottles = sum(t.bottles.count() for t in delivered_transactions)
-    
-    if delivered_count == 0:
+    delivered_txn_count = delivered_txns.count()
+    delivered_bottles = sum(t.bottles.count() for t in delivered_txns)  # ✅ correct
+
+    if delivered_txn_count == 0 or delivered_bottles == 0:
         messages.warning(request, 'No new delivered transactions to bill for this client.')
         return redirect('client_list')
 
-    returned_transactions = Transaction.objects.filter(client=client, transaction_type='returned', billed=False)
-    returned_bottles = sum(t.bottles.count() for t in returned_transactions)    
+    returned_txns = Transaction.objects.filter(
+        client=client, transaction_type='returned', billed=False
+    )
+    returned_bottles = sum(t.bottles.count() for t in returned_txns)
     pending_bottles = delivered_bottles - returned_bottles
-    price = BottlePricing.get_solo().price
-    total = delivered_bottles * price
-    
-    # Save bill to database
+
+    price = BottlePricing.get_solo().price  # Decimal
+
+    # Totals (GST on taxable = subtotal - discount)
+    totals = compute_totals(
+        quantity=delivered_bottles,
+        price_per_bottle=price,
+        discount_pct=discount_percentage,
+        gst_pct=gst_percentage
+    )
+
     bill = Bill.objects.create(
         client=client,
-        delivered_bottles=delivered_count,
+        delivered_bottles=delivered_bottles,            # ✅ store bottle count, not txn count
         returned_bottles=returned_bottles,
         pending_bottles=pending_bottles,
         price_per_bottle=price,
-        total_amount=total,
+
+        # legacy subtotal (keep name for old template bits)
+        total_amount=totals['subtotal'],
+
+        # normalized new fields
+        subtotal_amount=totals['subtotal'],
+        discount_percentage=totals['discount_pct'],
+        discount_amount=totals['discount_amount'],
+        taxable_amount=totals['taxable'],
+        gst_percentage=totals['gst_pct'],
+        gst_amount=totals['gst_amount'],
+        final_amount=totals['final'],
+
         generated_by=request.user,
         bill_type='auto'
     )
-    
-    # Mark all unbilled transactions as billed (excluding those already in custom bills)
+
+    # Mark all unbilled as billed (except ones already in custom bills)
     Transaction.objects.filter(
-        client=client, 
+        client=client,
         billed=False
     ).exclude(
-        id__in=BillTransaction.objects.filter(bill__client=client, bill__bill_type='custom').values_list('transaction_id', flat=True)
+        id__in=BillTransaction.objects.filter(
+            bill__client=client, bill__bill_type='custom'
+        ).values_list('transaction_id', flat=True)
     ).update(billed=True)
-    
+
     context = {
         'client': client,
-        'delivered': delivered_count,
+        'delivered': delivered_bottles,
         'returned': returned_bottles,
         'pending': pending_bottles,
         'price': price,
-        'total': total,
+        'total': bill.total_amount,
         'bill': bill,
         'bill_date': bill.bill_date,
         'is_custom': False,
+        'discount': bill.discount_percentage,
+        'final_amount': bill.final_amount,
+        'admin_client': admin_client,  # pass admin details
     }
-    
-    # Check if PDF export is requested
     if request.GET.get('format') == 'pdf':
         return generate_pdf_bill(request, context)
-    
     return render(request, 'generate_bill.html', context)
 
+def _fmt_money(val):
+    try:
+        return f"₹{Decimal(val):.2f}"
+    except Exception:
+        return f"₹{val}"
+
+
 def generate_pdf_bill(request, context):
-    """Generate PDF version of the bill"""
-    # Create a BytesIO object to receive PDF data.
     buffer = BytesIO()
-    # Create a canvas.
     p = canvas.Canvas(buffer, pagesize=letter)
-    
-    # Set document information
+
     p.setTitle("Bill")
     p.setAuthor("O2 Bottle Management System")
-    p.setSubject("Bill for " + context["client"].name)
+    p.setSubject(f"Bill for {context['client'].name}")
     p.setKeywords("O2 Bottle, Bill, Management")
-    
-    # Set font
     p.setFont("Helvetica", 12)
-    
-    # Draw title
+
+    # Header
     p.drawString(1 * inch, 10 * inch, "O2 Bottle Management System")
     p.drawString(1 * inch, 9.5 * inch, "Bill")
-    
-    # Draw client details
-    p.drawString(1 * inch, 9 * inch, "Client: " + context["client"].name)
-    p.drawString(1 * inch, 8.5 * inch, "Address: " + context["client"].address)
-    p.drawString(1 * inch, 8 * inch, "Contact: " + context["client"].contact)
-    
-    # Draw bill details
-    p.drawString(1 * inch, 7.5 * inch, "Bill Date: " + context["bill_date"].strftime("%Y-%m-%d"))
-    p.drawString(1 * inch, 7 * inch, "Price per Bottle: ₹" + str(context["price"]))
-    p.drawString(1 * inch, 6.5 * inch, "Total Pending Bottles: " + str(context["pending"]))
-    p.drawString(1 * inch, 6 * inch, "Total Amount: ₹" + str(context["total"]))
-    
-    # Draw generated by
-    p.drawString(1 * inch, 5.5 * inch, "Generated by: " + context["bill"].generated_by.username)
-    
-    # Save the PDF to the BytesIO buffer.
+
+    # Client
+    client = context["client"]
+    p.drawString(1 * inch, 9 * inch, f"Client: {client.name}")
+    p.drawString(1 * inch, 8.5 * inch, f"Address: {client.address}")
+    p.drawString(1 * inch, 8 * inch, f"Contact: {client.contact}")
+    if getattr(client, "gst_number", None):
+        p.drawString(1 * inch, 7.75 * inch, f"GSTIN: {client.gst_number}")
+
+    bill = context["bill"]
+
+    # Bill details
+    y = 7.2 * inch
+    p.drawString(1 * inch, y, f"Bill Date: {context['bill_date'].strftime('%Y-%m-%d')}")
+    y -= 0.3 * inch
+    p.drawString(1 * inch, y, f"Bottles Delivered: {bill.delivered_bottles}")
+    y -= 0.3 * inch
+    p.drawString(1 * inch, y, f"Price per Bottle: {_fmt_money(bill.price_per_bottle)}")
+
+    # Amounts
+    subtotal = getattr(bill, "subtotal_amount", context.get("total"))
+    discount_pct = getattr(bill, "discount_percentage", Decimal("0"))
+    discount_amount = getattr(bill, "discount_amount", Decimal("0"))
+    taxable = getattr(bill, "taxable_amount", subtotal)
+    gst_pct = getattr(bill, "gst_percentage", Decimal("18"))
+    gst_amount = getattr(bill, "gst_amount", Decimal("0"))
+    final_amount = getattr(bill, "final_amount", subtotal)
+
+    y -= 0.45 * inch
+    p.drawString(1 * inch, y, f"Subtotal: {_fmt_money(subtotal)}")
+    y -= 0.3 * inch
+    if discount_pct and discount_pct != 0:
+        p.drawString(1 * inch, y, f"Discount ({discount_pct}%): -{_fmt_money(discount_amount)}")
+        y -= 0.3 * inch
+    p.drawString(1 * inch, y, f"Taxable Value: {_fmt_money(taxable)}")
+    y -= 0.3 * inch
+    p.drawString(1 * inch, y, f"GST ({gst_pct}%): {_fmt_money(gst_amount)}")
+    y -= 0.3 * inch
+    p.drawString(1 * inch, y, f"Final Payable: {_fmt_money(final_amount)}")
+    y -= 0.45 * inch
+
+    p.drawString(1 * inch, y, f"Generated by: {bill.generated_by.username}")
+    y -= 0.6 * inch
+
+    # ---------------- Payment Details Section ----------------
+    admin_client = context.get("admin_client")
+    if admin_client:
+        p.setFont("Helvetica-Bold", 12)
+        p.setFillColor(colors.white)
+        p.setStrokeColor(colors.black)
+
+        # Card header
+        p.setFillColor(colors.grey)
+        p.rect(1 * inch, y - 0.3 * inch, 6 * inch, 0.35 * inch, fill=1)
+        p.setFillColor(colors.white)
+        p.drawCentredString(4 * inch, y - 0.1 * inch, "Payment Details")
+
+        # Reset font for details
+        y -= 0.6 * inch
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.black)
+
+        # Left column: Bank details
+        left_x = 1.1 * inch
+        right_x = 3.8 * inch
+        col_y = y
+
+        p.setFillColor(colors.blue)
+        p.drawString(left_x, col_y, "Bank Transfer")
+        p.setFillColor(colors.black)
+        col_y -= 0.2 * inch
+        p.drawString(left_x, col_y, f"Account Holder: {admin_client.account_holder}")
+        col_y -= 0.2 * inch
+        p.drawString(left_x, col_y, f"Account No: {admin_client.account_number}")
+        col_y -= 0.2 * inch
+        p.drawString(left_x, col_y, f"IFSC: {admin_client.ifsc}")
+        col_y -= 0.2 * inch
+        p.drawString(left_x, col_y, f"Branch: {admin_client.branch}")
+        col_y -= 0.2 * inch
+        p.drawString(left_x, col_y, f"Type: {admin_client.account_type}")
+
+        # Right column: UPI
+        upi_y = y
+        p.setFillColor(colors.green)
+        p.drawString(right_x, upi_y, "UPI Payment")
+        p.setFillColor(colors.black)
+        upi_y -= 0.2 * inch
+        if getattr(admin_client, "vpa", None):
+            p.drawString(right_x, upi_y, f"VPA: {admin_client.vpa}")
+            upi_y -= 0.2 * inch
+        if getattr(admin_client, "upi_number", None):
+            p.drawString(right_x, upi_y, f"UPI No: {admin_client.upi_number}")
+            upi_y -= 0.3 * inch
+
+        # QR code (resize ~120px)
+        if getattr(admin_client, "upi_qr", None):
+            try:
+                qr_path = admin_client.upi_qr.path
+                qr_img = ImageReader(qr_path)
+                p.drawImage(qr_img, right_x, upi_y - 1.2 * inch, width=1.2 * inch, height=1.2 * inch, preserveAspectRatio=True)
+                p.setFont("Helvetica-Oblique", 8)
+                p.drawCentredString(right_x + 0.6 * inch, upi_y - 1.3 * inch, "Scan & Pay")
+                p.setFont("Helvetica", 10)
+            except Exception as e:
+                p.drawString(right_x, upi_y, "[QR Code Missing]")
+
+    # ----------------------------------------------------------
+
     p.save()
-    
-    # Seek to the beginning of the BytesIO buffer so we can read its contents.
     buffer.seek(0)
-    
-    # Prepare the HTTP response.
-    response = HttpResponse(buffer, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="bill_{context["client"].name}_{context["bill_date"].strftime("%Y%m%d")}.pdf"'
+    response = HttpResponse(buffer, content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f"attachment; filename=\"bill_{client.name}_{context['bill_date'].strftime('%Y%m%d')}.pdf\""
+    )
     return response
 
 @staff_member_required
@@ -825,14 +1004,18 @@ def debug_photos(request):
 
 @login_required
 def admin_profile(request):
-    admin_client, created = Client.objects.get_or_create(role='admin', defaults={'name': 'Admin'})
+    admin_client, created = Client.objects.get_or_create(
+        role='admin',
+        defaults={'name': 'Admin'}
+    )
     if request.method == 'POST':
-        form = AdminProfileForm(request.POST, instance=admin_client)
+        form = AdminProfileForm(request.POST, request.FILES, instance=admin_client)  # 👈 added request.FILES
         if form.is_valid():
             form.save()
             return redirect('admin_profile')
     else:
         form = AdminProfileForm(instance=admin_client)
+
     return render(request, 'admin_profile.html', {'form': form})
 
 
