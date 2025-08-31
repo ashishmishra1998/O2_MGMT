@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 from decimal import Decimal
 
 # Create your models here.
@@ -81,7 +82,8 @@ class Transaction(models.Model):
     ]
     bottles = models.ManyToManyField(Bottle)
     client = models.ForeignKey(Client, on_delete=models.CASCADE)
-    date = models.DateTimeField(auto_now_add=True)
+    date = models.DateTimeField(default=timezone.now, help_text="Date and time of the transaction")
+    custom_date = models.DateTimeField(null=True, blank=True, help_text="Optional custom date for the transaction. If not provided, current date/time will be used.")
     delivered_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPE)
     billed = models.BooleanField(default=False)  # Track if this transaction has been billed

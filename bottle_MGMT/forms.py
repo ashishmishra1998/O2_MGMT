@@ -41,11 +41,22 @@ class AdminProfileForm(forms.ModelForm):
 class TransactionForm(forms.ModelForm):
     class Meta:
         model = Transaction
-        fields = ['client', 'bottles', 'transaction_type']
+        fields = ['client', 'bottles', 'transaction_type', 'custom_date']
+        widgets = {
+            'custom_date': forms.DateTimeInput(attrs={
+                'type': 'datetime-local',
+                'class': 'form-control'
+            })
+        }
 
     def __init__(self, *args, **kwargs):
         transaction_type = kwargs.pop('transaction_type', None)
         super().__init__(*args, **kwargs)
+        
+        # Make custom_date optional
+        self.fields['custom_date'].required = False
+        self.fields['custom_date'].help_text = "Optional: Leave blank to use current date/time"
+        
         if transaction_type == 'delivered':
             self.fields['bottles'].queryset = Bottle.objects.filter(status='in_stock')
         elif transaction_type == 'returned':
