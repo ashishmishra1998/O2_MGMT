@@ -77,8 +77,12 @@ WSGI_APPLICATION = 'O2_bottle_MGMT.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'rainbowgases$default',
+        'USER': 'rainbowgases',
+        'PASSWORD': 'Rainbow@1234',
+        'HOST': 'rainbowgases.mysql.pythonanywhere-services.com',
+        'PORT': '3306',
     }
 }
 
