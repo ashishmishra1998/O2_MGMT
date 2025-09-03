@@ -31,13 +31,13 @@ ADMIN_PASSWORD = 'Admin@123'
 DELIVERY_USERNAME = 'delivery'
 DELIVERY_PASSWORD = 'boy@123'
 
-def create_default_users():
-    if not User.objects.filter(username=ADMIN_USERNAME).exists():
-        User.objects.create_superuser(ADMIN_USERNAME, 'admin@example.com', ADMIN_PASSWORD)
-    if not User.objects.filter(username=DELIVERY_USERNAME).exists():
-        User.objects.create_user(DELIVERY_USERNAME, 'delivery@example.com', DELIVERY_PASSWORD)
+# def create_default_users():
+#     if not User.objects.filter(username=ADMIN_USERNAME).exists():
+#         User.objects.create_superuser(ADMIN_USERNAME, 'admin@example.com', ADMIN_PASSWORD)
+#     if not User.objects.filter(username=DELIVERY_USERNAME).exists():
+#         User.objects.create_user(DELIVERY_USERNAME, 'delivery@example.com', DELIVERY_PASSWORD)
 
-create_default_users()
+# create_default_users()
 
 def login_view(request):
     if request.method == 'POST':
