@@ -535,7 +535,7 @@ def generate_pdf_bill(request, context):
     
     # Set document information
     p.setTitle("Bill")
-    p.setAuthor("O2 Bottle Management System")
+    p.setAuthor("Rainbow Gases")
     p.setSubject("Bill for " + context["client"].name)
     p.setKeywords("O2 Bottle, Bill, Management")
     
@@ -543,7 +543,7 @@ def generate_pdf_bill(request, context):
     p.setFont("Helvetica", 12)
     
     # Draw title
-    p.drawString(1 * inch, 10 * inch, "O2 Bottle Management System")
+    p.drawString(1 * inch, 10 * inch, "Rainbow Gases")
     p.drawString(1 * inch, 9.5 * inch, "Bill")
     
     # Draw client details
