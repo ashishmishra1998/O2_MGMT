@@ -847,7 +847,7 @@ def category_create(request):
     else:
         form = BottleCategoryForm()
     
-    return render(request, 'category_create.html', {'form': form})
+    return render(request, 'category_form.html', {'form': form, 'edit': False})
 
 @staff_member_required
 def category_edit(request, category_id):
@@ -866,4 +866,4 @@ def category_edit(request, category_id):
     else:
         form = BottleCategoryForm(instance=category)
     
-    return render(request, 'category_edit.html', {'form': form, 'category': category})
+    return render(request, 'category_form.html', {'form': form, 'category': category, 'edit': True})
