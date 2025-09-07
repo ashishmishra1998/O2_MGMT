@@ -12,7 +12,7 @@
             <button type="submit" class="btn btn-primary">Search</button>
         </div>
         <div class="col-auto">
-            {% if request.user.username == 'admin' %}
+            {% if request.user.is_staff %}
             <a href="{% url 'client_create' %}" class="btn btn-success">Add New Client</a>
             {% endif %}
         </div>

@@ -22,7 +22,7 @@
 
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav ms-auto">
-                {% if request.user.username == 'admin' %}
+                {% if request.user.is_staff %}
                 <li class="nav-item"><a class="nav-link active" href="{% url 'admin_dashboard' %}">Dashboard</a></li>
                 <li class="nav-item"><a class="nav-link" href="{% url 'admin_profile' %}">Profile</a></li>
                 <li class="nav-item"><a class="nav-link" href="{% url 'inventory' %}">Inventory</a></li>
@@ -38,7 +38,7 @@
                 <li class="nav-item"><a class="nav-link" href="{% url 'transaction_list' %}">Transactions</a></li>
 
 
-                {% if request.user.username == 'admin' %}
+                {% if request.user.is_staff %}
                 <li class="nav-item"><a class="nav-link" href="{% url 'reports' %}">Reports</a></li>
                 {% endif %}
                 <li class="nav-item"><a class="nav-link" href="{% url 'logout' %}">Logout</a></li>
