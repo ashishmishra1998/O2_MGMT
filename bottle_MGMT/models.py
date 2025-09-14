@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from decimal import Decimal
 
 # Create your models here.
-
+ 
 class Client(models.Model):
     ROLE_CHOICES = [
         ('customer', 'Customer'),

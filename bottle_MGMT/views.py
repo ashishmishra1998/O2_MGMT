@@ -489,6 +489,7 @@ def generate_bill(request, client_id, bill_id=None):
     """Generate bill - modified to handle both auto and custom bills"""
     client = get_object_or_404(Client, id=client_id)
     admin_client = Client.objects.filter(role='admin').first()
+    
 
     if bill_id:
         bill = get_object_or_404(Bill, id=bill_id, client=client)

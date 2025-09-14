@@ -23,7 +23,7 @@ class ClientForm(forms.ModelForm):
     class Meta:
         model = Client
         fields = ['name', 'contact', 'email', 'address', 'company_name', 'gst_number', 'alt_contact']
-
+ 
 class AdminProfileForm(forms.ModelForm):
     class Meta:
         model = Client
