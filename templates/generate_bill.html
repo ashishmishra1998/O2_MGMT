@@ -49,14 +49,17 @@
         </tr>
         {% endif %}
 
-        <tr>
-            <th>Taxable Value</th>
-            <td>₹{{ bill.taxable_amount|default:total|floatformat:2 }}</td>
-        </tr>
-        <tr>
-            <th>GST</th>
-            <td>{{ bill.gst_percentage|default:"18" }}% (₹{{ bill.gst_amount|floatformat:2 }})</td>
-        </tr>
+        {% if bill.gst_percentage and bill.gst_percentage|floatformat:2 != '0.00' %}
+            <tr>
+                <th>Taxable Value</th>
+                <td>₹{{ bill.taxable_amount|default:total|floatformat:2 }}</td>
+            </tr>
+            <tr>
+                <th>GST</th>
+                <td>{{ bill.gst_percentage }}% (₹{{ bill.gst_amount|floatformat:2 }})</td>
+            </tr>
+        {% endif %}
+
         <tr class="table-success">
             <th>Final Payable</th>
             <td><strong>₹{{ bill.final_amount|default:total|floatformat:2 }}</strong></td>

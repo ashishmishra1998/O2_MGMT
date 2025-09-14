@@ -4,7 +4,7 @@ from django.utils import timezone
 from decimal import Decimal
 
 # Create your models here.
-
+ 
 class Client(models.Model):
     ROLE_CHOICES = [
         ('customer', 'Customer'),

@@ -5,7 +5,7 @@ Q2 = Decimal('0.01')
 
 def _q2(v: Decimal) -> Decimal:
     return v.quantize(Q2, rounding=ROUND_HALF_UP)
-
+ 
 def compute_totals(quantity: int,
                    price_per_bottle: Decimal,
                    discount_pct: Decimal = Decimal('0'),
