@@ -5,7 +5,7 @@
 {% block content %}
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>Bottle Inventory</h2>
-        {% if request.user.username == 'admin' %}
+        {% if request.user.is_staff %}
         <a href="{% url 'add_bottles' %}" class="btn btn-primary">Add Bottles to Inventory</a>
         {% endif %}
     </div>

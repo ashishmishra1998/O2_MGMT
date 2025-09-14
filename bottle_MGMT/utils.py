@@ -40,3 +40,15 @@ def compute_totals(quantity: int,
         'gst_amount': gst_amount,
         'final': final,
     }
+
+
+def create_default_users():
+    from django.contrib.auth.models import User
+    ADMIN_USERNAME = 'Rg'
+    ADMIN_PASSWORD = 'Rg@110'
+    DELIVERY_USERNAME = 'delivery'
+    DELIVERY_PASSWORD = 'boy@123'
+    if not User.objects.filter(username=ADMIN_USERNAME).exists():
+        User.objects.create_superuser(ADMIN_USERNAME, 'admin@example.com', ADMIN_PASSWORD)
+    if not User.objects.filter(username=DELIVERY_USERNAME).exists():
+        User.objects.create_user(DELIVERY_USERNAME, 'delivery@example.com', DELIVERY_PASSWORD)

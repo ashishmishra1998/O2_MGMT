@@ -29,9 +29,15 @@
             {{ form.client.errors }}
         </div>
         <div class="mb-3">
-            <label for="id_bottle" class="form-label" multiple=multiple>Bottles</label>
+            <label for="id_bottles" class="form-label">Bottles</label>
             {{ form.bottles|add_class:'form-select select2-multiple' }}
             {{ form.bottles.errors }}
+        </div>
+        <div class="mb-3">
+            <label for="id_custom_date" class="form-label">Transaction Date & Time (Optional)</label>
+            {{ form.custom_date|add_class:'form-control' }}
+            <div class="form-text">{{ form.custom_date.help_text }}</div>
+            {{ form.custom_date.errors }}
         </div>
         <div class="mb-3">
         <div class="mb-3">
