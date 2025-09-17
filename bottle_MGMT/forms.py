@@ -73,4 +73,4 @@ class BottlePricingForm(forms.ModelForm):
 class BottleCategoryForm(forms.ModelForm):
     class Meta:
         model = BottleCategory
-        fields = ['name']
+        fields = ['name', 'price'] 

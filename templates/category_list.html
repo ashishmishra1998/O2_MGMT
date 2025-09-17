@@ -11,7 +11,10 @@
         <ul class="list-group">
             {% for category in categories %}
                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                    {{ category.name }}
+                    <span>
+                        {{ category.name }}  
+                        <span class="text-muted">(Rs. {{ category.price }})</span>
+                    </span>
                     <a href="{% url 'category_edit' category.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
                 </li>
             {% endfor %}
