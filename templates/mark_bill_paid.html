@@ -3,6 +3,7 @@
 {% block title %}Mark Bill as Paid{% endblock %}
 
 {% block content %}
+<div class="container mt-4">
     <h2>Mark Bill as Paid</h2>
     
     <div class="card mb-4">
@@ -22,7 +23,11 @@
                     <p><strong>Returned Bottles:</strong> {{ bill.returned_bottles }}</p>
                     <p><strong>Pending Bottles:</strong> {{ bill.pending_bottles }}</p>
                     <p><strong>Price per Bottle:</strong> ₹{{ bill.price_per_bottle }}</p>
-                    <p><strong>Total Amount:</strong> <span class="h5 text-success">₹{{ bill.total_amount }}</span></p>
+                    <p><strong>Total Amount:</strong> 
+                        <span class="h5 text-success">
+                            ₹{{ bill.final_amount|default:bill.total_amount }}
+                        </span>
+                    </p>
                 </div>
             </div>
         </div>
@@ -38,4 +43,5 @@
         <button type="submit" class="btn btn-success btn-lg">Confirm Payment</button>
         <a href="{% url 'bill_history' bill.client.id %}" class="btn btn-secondary">Cancel</a>
     </form>
+</div>
 {% endblock %}

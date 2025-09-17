@@ -927,10 +927,15 @@ def bill_history(request, client_id):
 
 @staff_member_required
 def mark_bill_paid(request, bill_id):
-    """Mark a bill as paid"""
-    from django.utils import timezone
+    """Mark a bill as paid (simple confirm flow)."""
     bill = get_object_or_404(Bill, id=bill_id)
-    
+
+    # Prevent duplicate marking
+    if bill.paid:
+        paid_on = bill.paid_date.strftime("%d %b %Y, %H:%M") if bill.paid_date else "earlier"
+        messages.info(request, f"Bill #{bill.id} is already marked paid (on {paid_on}).")
+        return redirect('bill_history', client_id=bill.client.id)
+
     if request.method == 'POST':
         bill.paid = True
         bill.paid_date = timezone.now()
@@ -938,7 +943,7 @@ def mark_bill_paid(request, bill_id):
         bill.save()
         messages.success(request, f'Bill #{bill.id} marked as paid successfully.')
         return redirect('bill_history', client_id=bill.client.id)
-    
+
     return render(request, 'mark_bill_paid.html', {'bill': bill})
 
 @staff_member_required
@@ -967,187 +972,201 @@ def delete_bill(request, bill_id):
 
 @staff_member_required
 def sales_analytics(request):
-    """Comprehensive sales analytics dashboard"""
-    from django.db.models import Sum, Count, Q
+    """Comprehensive sales analytics dashboard (with fixed recent transactions)"""
+    from django.db.models import Sum
     from django.utils import timezone
     from datetime import datetime, timedelta
     import calendar
-    
+    from decimal import Decimal
+    # local imports used in calculations
+    from .models import Transaction, BottleCategory, BottlePricing, BillTransaction, Bottle, Bill, Client
+
     # Get date filters
-    selected_year = request.GET.get('year', timezone.now().year)
-    selected_month = request.GET.get('month', timezone.now().month)
-    selected_date = request.GET.get('date', timezone.now().date())
-    
-    # Convert to integers
-    selected_year = int(selected_year)
-    selected_month = int(selected_month)
-    
-    # Current date info
+    selected_year = int(request.GET.get('year', timezone.now().year))
+    selected_month = int(request.GET.get('month', timezone.now().month))
+
     now = timezone.now()
     current_year = now.year
     current_month = now.month
-    current_date = now.date()
-    
+    today = now.date()
+
     # Date ranges
-    today = timezone.now().date()
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
     month_start = today.replace(day=1)
     month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
     year_start = today.replace(month=1, day=1)
     year_end = today.replace(month=12, day=31)
-    
-    # Get all bills
+
     all_bills = Bill.objects.all()
-    
-    # Sales Analytics
-    def get_sales_data(bills_qs):
+
+    # price map for quick lookup (category_id -> Decimal price)
+    price_map = {}
+    for c in BottleCategory.objects.all():
+        try:
+            price_map[c.id] = Decimal(c.price)
+        except Exception:
+            price_map[c.id] = Decimal("0.00")
+    default_price = Decimal(BottlePricing.get_solo().price)
+
+    def get_sales_data(bills_qs, include_unbilled=False):
         total_bills = bills_qs.count()
-        total_amount = bills_qs.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        
-        # Fetch transactions linked to these bills
-        transactions = Transaction.objects.filter(
-            bill_transactions__bill__in=bills_qs
-        ).prefetch_related('bottles')
+        billed_amount = bills_qs.aggregate(Sum("final_amount"))["final_amount__sum"] or Decimal("0.00")
 
-        # Bottle counts
-        delivered_bottles = sum(
-            t.bottles.count() for t in transactions if t.transaction_type == 'delivered'
-        )
-        returned_bottles = sum(
-            t.bottles.count() for t in transactions if t.transaction_type == 'returned'
-        )
-        pending_bottles = delivered_bottles - returned_bottles
+        paid_amount = bills_qs.filter(paid=True).aggregate(Sum("final_amount"))["final_amount__sum"] or Decimal("0.00")
+        unpaid_amount = billed_amount - paid_amount
 
-        # Payment info (still from Bill)
-        paid_bills = bills_qs.filter(paid=True)
-        paid_amount = paid_bills.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        unpaid_amount = total_amount - paid_amount
+        delivered_bottles = bills_qs.aggregate(Sum("delivered_bottles"))["delivered_bottles__sum"] or 0
+
+        if include_unbilled:
+            # include unbilled delivered transactions in current period
+            unbilled_txns = Transaction.objects.filter(billed=False, transaction_type="delivered")
+            unbilled_bottles = 0
+            unbilled_amount = Decimal("0.00")
+            # iterate efficiently with prefetch
+            for t in unbilled_txns.prefetch_related('bottles__category'):
+                for b in t.bottles.all():
+                    unbilled_bottles += 1
+                    unbilled_amount += price_map.get(b.category_id, default_price)
+            delivered_bottles += unbilled_bottles
+            unpaid_amount += unbilled_amount
+            billed_amount += unbilled_amount
 
         return {
-            'total_bills': total_bills,
-            'total_amount': total_amount,
-            'total_bottles_delivered': delivered_bottles,
-            'total_bottles_returned': returned_bottles,
-            'total_pending_bottles': pending_bottles,
-            'paid_amount': paid_amount,
-            'unpaid_amount': unpaid_amount,
-            'payment_rate': (paid_amount / total_amount * 100) if total_amount > 0 else 0
+            "total_bills": total_bills,
+            "total_amount": billed_amount,
+            "total_bottles_delivered": delivered_bottles,
+            "paid_amount": paid_amount,
+            "unpaid_amount": unpaid_amount,
+            "payment_rate": (paid_amount / billed_amount * 100) if billed_amount > 0 else 0,
         }
 
-    
-    # Daily, Weekly, Monthly, Yearly sales
-    daily_sales = get_sales_data(all_bills.filter(bill_date__date=today))
-    weekly_sales = get_sales_data(all_bills.filter(bill_date__date__range=[week_start, week_end]))
-    monthly_sales = get_sales_data(all_bills.filter(bill_date__date__range=[month_start, month_end]))
-    yearly_sales = get_sales_data(all_bills.filter(bill_date__date__range=[year_start, year_end]))
-    
-    # Selected period sales
+    # Daily/weekly/monthly/yearly (include unbilled so pending shows immediately)
+    daily_sales = get_sales_data(all_bills.filter(bill_date__date=today), include_unbilled=True)
+    weekly_sales = get_sales_data(all_bills.filter(bill_date__date__range=[week_start, week_end]), include_unbilled=True)
+    monthly_sales = get_sales_data(all_bills.filter(bill_date__date__range=[month_start, month_end]), include_unbilled=True)
+    yearly_sales = get_sales_data(all_bills.filter(bill_date__date__range=[year_start, year_end]), include_unbilled=True)
+
+    # selected period
     selected_start = datetime(selected_year, selected_month, 1).date()
     selected_end = (selected_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-    selected_sales = get_sales_data(all_bills.filter(bill_date__date__range=[selected_start, selected_end]))
-    
-    # Current stock status
+    selected_sales = get_sales_data(all_bills.filter(bill_date__date__range=[selected_start, selected_end]), include_unbilled=True)
+
+    # stock status
     total_stock = Bottle.objects.count()
-    in_stock = Bottle.objects.filter(status='in_stock').count()
-    delivered_stock = Bottle.objects.filter(status='delivered').count()
-    
-    # Calculate percentages
+    in_stock = Bottle.objects.filter(status="in_stock").count()
+    delivered_stock = Bottle.objects.filter(status="delivered").count()
     in_stock_percent = round((in_stock / total_stock * 100) if total_stock > 0 else 0, 1)
     delivered_percent = round((delivered_stock / total_stock * 100) if total_stock > 0 else 0, 1)
-    
-    # Client-wise analytics
-    client_analytics = []
-    clients = Client.objects.all()
-    for client in clients:
-        client_bills = all_bills.filter(client=client)
-        transactions = Transaction.objects.filter(
-            bill_transactions__bill__in=client_bills
-        ).prefetch_related('bottles')
 
-        total_delivered = sum(
-            t.bottles.count() for t in transactions if t.transaction_type == 'delivered'
-        )
-        total_returned = sum(
-            t.bottles.count() for t in transactions if t.transaction_type == 'returned'
-        )
-        total_pending = total_delivered - total_returned
-        
-        total_amount = client_bills.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        paid_amount = client_bills.filter(paid=True).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        unpaid_amount = total_amount - paid_amount
-        
+    # client-wise analytics (include unbilled)
+    client_analytics = []
+    for client in Client.objects.filter(role="customer"):
+        client_bills = all_bills.filter(client=client)
+        billed_amount = client_bills.aggregate(Sum("final_amount"))["final_amount__sum"] or Decimal("0.00")
+        paid_amount = client_bills.filter(paid=True).aggregate(Sum("final_amount"))["final_amount__sum"] or Decimal("0.00")
+        unpaid_amount = billed_amount - paid_amount
+
+        # unbilled deliveries for this client
+        unbilled_txns = Transaction.objects.filter(client=client, billed=False, transaction_type="delivered").prefetch_related('bottles__category')
+        unbilled_amount = Decimal("0.00")
+        unbilled_bottles = 0
+        for t in unbilled_txns:
+            for b in t.bottles.all():
+                unbilled_bottles += 1
+                unbilled_amount += price_map.get(b.category_id, default_price)
+
+        total_delivered = client_bills.aggregate(Sum("delivered_bottles"))["delivered_bottles__sum"] or 0
+        total_delivered += unbilled_bottles
+
+        unpaid_amount += unbilled_amount
+        billed_amount += unbilled_amount
+
         client_analytics.append({
-            'client': client,
-            'total_delivered': total_delivered,
-            'total_returned': total_returned,
-            'total_pending': total_pending,
-            'total_amount': total_amount,
-            'paid_amount': paid_amount,
-            'unpaid_amount': unpaid_amount,
-            'payment_rate': (paid_amount / total_amount * 100) if total_amount > 0 else 0
+            "client": client,
+            "total_delivered": total_delivered,
+            "total_pending": total_delivered,  # simplified (no returned state)
+            "total_amount": billed_amount,
+            "paid_amount": paid_amount,
+            "unpaid_amount": unpaid_amount,
+            "payment_rate": (paid_amount / billed_amount * 100) if billed_amount > 0 else 0,
         })
-    
-    # Sort clients by total amount (highest first)
-    client_analytics.sort(key=lambda x: x['total_amount'], reverse=True)
-    
-    # Monthly trend data for charts
+
+    client_analytics.sort(key=lambda x: x["total_amount"], reverse=True)
+
+    # monthly trend (billed only)
     monthly_trend = []
     for month in range(1, 13):
-        month_start = datetime(selected_year, month, 1).date()
-        month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-        
-        month_bills = all_bills.filter(bill_date__date__range=[month_start, month_end])
-        transactions = Transaction.objects.filter(
-            bill_transactions__bill__in=month_bills
-        ).prefetch_related('bottles')
+        m_start = datetime(selected_year, month, 1).date()
+        m_end = (m_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        m_bills = all_bills.filter(bill_date__date__range=[m_start, m_end])
+        m_amount = m_bills.aggregate(Sum("final_amount"))["final_amount__sum"] or Decimal("0.00")
+        m_bottles = m_bills.aggregate(Sum("delivered_bottles"))["delivered_bottles__sum"] or 0
+        monthly_trend.append({"month": calendar.month_name[month], "amount": m_amount, "bottles": m_bottles})
 
-        month_amount = month_bills.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        month_bottles = sum(t.bottles.count() for t in transactions if t.transaction_type == 'delivered')
+    # --- FIX: recent transactions (show transactions, not bills) ---
+    recent_txns_qs = Transaction.objects.select_related("client", "delivered_by").prefetch_related("bottles__category").order_by("-date")[:10]
+    recent_transactions = []
+    for txn in recent_txns_qs:
+        # bottle count
+        bottles = list(txn.bottles.all())
+        bottle_count = len(bottles)
+        # calculate transaction amount by summing per-bottle category price
+        txn_amount = Decimal("0.00")
+        for b in bottles:
+            txn_amount += price_map.get(b.category_id, default_price)
 
-        monthly_trend.append({
-            'month': calendar.month_name[month],
-            'amount': month_amount,
-            'bottles': month_bottles
+        # find bill if any
+        bt = BillTransaction.objects.filter(transaction=txn).select_related("bill").first()
+        bill_id = bt.bill.id if bt and bt.bill else None
+        billed_flag = bool(bill_id)
+
+        recent_transactions.append({
+            "id": txn.id,
+            "date": txn.date,
+            "client": txn.client,
+            "client_name": txn.client.name,
+            "type": txn.transaction_type,
+            "bottles": bottle_count,
+            "amount": txn_amount,
+            "billed": billed_flag,
+            "bill_id": bill_id,
+            "delivered_by": getattr(txn.delivered_by, "username", None),
         })
-    
-    # Recent transactions
-    recent_bills = all_bills.order_by('-bill_date')[:10]
-    
-    # Top performing clients
-    top_clients = sorted(client_analytics, key=lambda x: x['total_amount'], reverse=True)[:5]
-    
-    # Create year range for dropdown (current year - 2 to current year + 2)
+
+    # recent bills kept for other parts of the template if needed
+    recent_bills = all_bills.order_by("-bill_date")[:10]
+
     year_range = list(range(current_year - 2, current_year + 3))
-    
+
     context = {
-        'daily_sales': daily_sales,
-        'weekly_sales': weekly_sales,
-        'monthly_sales': monthly_sales,
-        'yearly_sales': yearly_sales,
-        'selected_sales': selected_sales,
-        'selected_year': selected_year,
-        'selected_month': selected_month,
-        'current_year': current_year,
-        'current_month': current_month,
-        'total_stock': total_stock,
-        'in_stock': in_stock,
-        'delivered_stock': delivered_stock,
-        'in_stock_percent': in_stock_percent,
-        'delivered_percent': delivered_percent,
-        'client_analytics': client_analytics,
-        'monthly_trend': monthly_trend,
-        'recent_bills': recent_bills,
-        'top_clients': top_clients,
-        'today': today,
-        'week_start': week_start,
-        'week_end': week_end,
-        'month_start': month_start,
-        'month_end': month_end,
-        'year_range': year_range,
+        "daily_sales": daily_sales,
+        "weekly_sales": weekly_sales,
+        "monthly_sales": monthly_sales,
+        "yearly_sales": yearly_sales,
+        "selected_sales": selected_sales,
+        "selected_year": selected_year,
+        "selected_month": selected_month,
+        "current_year": current_year,
+        "current_month": current_month,
+        "total_stock": total_stock,
+        "in_stock": in_stock,
+        "delivered_stock": delivered_stock,
+        "in_stock_percent": in_stock_percent,
+        "delivered_percent": delivered_percent,
+        "client_analytics": client_analytics,
+        "monthly_trend": monthly_trend,
+        "recent_bills": recent_bills,
+        "recent_transactions": recent_transactions,   # NEW: recent transactions list of dicts
+        "top_clients": client_analytics[:5],
+        "today": today,
+        "week_start": week_start,
+        "week_end": week_end,
+        "month_start": month_start,
+        "month_end": month_end,
+        "year_range": year_range,
     }
-    
-    return render(request, 'sales_analytics.html', context)
+    return render(request, "sales_analytics.html", context)
 
 def logout_view(request):
     logout(request)
