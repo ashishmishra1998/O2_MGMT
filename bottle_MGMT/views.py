@@ -5,8 +5,8 @@ from django.contrib.auth.models import User
 from django.http import HttpResponse
 from .forms import ClientForm, AddBottlesForm
 from .models import Client
-from .forms import TransactionForm
-from .models import Transaction, Bottle, Bill, BillTransaction
+from .forms import TransactionForm, AdminProfileForm, BottlePricingForm, ClientForm, AddBottlesForm, BottleCategoryForm
+from .models import Transaction, Bottle, Bill, BillTransaction, TransactionPhoto, BottleCategory
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from datetime import timedelta
@@ -22,8 +22,10 @@ from reportlab.lib.units import inch
 from io import BytesIO
 from django.db.models import Q
 from datetime import datetime
-
-
+from decimal import Decimal
+from .utils import compute_totals
+from reportlab.lib import colors
+from reportlab.lib.utils import ImageReader
 
 # Ensure admin and delivery boy users exist
 ADMIN_USERNAME = 'admin'
@@ -61,7 +63,7 @@ def admin_dashboard(request):
     returned = Bottle.objects.filter(status='returned').count()
     in_stock = Bottle.objects.filter(status='in_stock').count()
     pending = delivered  # Bottles delivered but not yet returned
-    recent_transactions = Transaction.objects.order_by('-date')[:5]
+    recent_transactions = Transaction.objects.prefetch_related('bottles').order_by('-date')[:5]
     return render(request, 'admin_dashboard.html', {
         'total_bottles': total_bottles,
         'delivered': delivered,
@@ -104,40 +106,31 @@ def client_list(request):
     from .models import Transaction
     client_stats = []
     for client in clients:
-        delivered = Transaction.objects.filter(client=client, transaction_type='delivered').count()
-        returned = Transaction.objects.filter(client=client, transaction_type='returned').count()
-        pending = delivered - returned
+        delivered_bottles = sum(
+            t.bottles.count() for t in Transaction.objects.filter(client=client, transaction_type='delivered')
+        )
+        # Count bottles for returned transactions
+        returned_bottles = sum(
+            t.bottles.count() for t in Transaction.objects.filter(client=client, transaction_type='returned')
+        )
+        pending_bottles = delivered_bottles - returned_bottles
         
-        # Count unbilled transactions for billing info (excluding custom billed transactions)
-        custom_billed_transaction_ids = BillTransaction.objects.filter(
-            bill__client=client, 
-            bill__bill_type='custom'
-        ).values_list('transaction_id', flat=True)
-        
-        unbilled_delivered = Transaction.objects.filter(
-            client=client, 
-            transaction_type='delivered', 
-            billed=False
-        ).exclude(id__in=custom_billed_transaction_ids).count()
-        
-        unbilled_returned = Transaction.objects.filter(
-            client=client, 
-            transaction_type='returned', 
-            billed=False
-        ).exclude(id__in=custom_billed_transaction_ids).count()
-        
-        unbilled_pending = unbilled_delivered - unbilled_returned
-        
+        # Total bottles in delivered transactions that are not yet billed
+        pending_bill_bottles = sum(
+            t.bottles.count() for t in Transaction.objects.filter(
+                client=client,
+                transaction_type='delivered',
+                billed=False
+            )
+        )
         client_stats.append({
             'client': client,
-            'delivered': delivered,
-            'returned': returned,
-            'pending': pending,
-            'unbilled_delivered': unbilled_delivered,
-            'unbilled_returned': unbilled_returned,
-            'unbilled_pending': unbilled_pending,
+            'delivered': delivered_bottles,
+            'returned': returned_bottles,
+            'pending': pending_bottles,
+            'pending_bill_bottles': pending_bill_bottles,
         })
-    return render(request, 'client_list.html', {'clients': clients, 'query': query, 'client_stats': client_stats})
+    return render(request, 'client_list.html', {'clients': clients, 'query': query, 'client_stats': client_stats})  
 
 @login_required
 def transaction_create(request):
@@ -151,28 +144,21 @@ def transaction_create(request):
         if form.is_valid():
             transaction = form.save(commit=False)
             transaction.delivered_by = request.user
-            
-            # Handle custom date - if provided, use it; otherwise use current time
-            if transaction.custom_date:
-                transaction.date = transaction.custom_date
-            else:
-                # Explicitly set current time to ensure correct timezone
-                from django.utils import timezone
-                transaction.date = timezone.now()
-            
-            # Save the transaction first
             transaction.save()
-            
-            # Save the many-to-many relationship (bottles)
             form.save_m2m()
             
-            # Update bottle status for all bottles in the transaction
-            for bottle in transaction.bottles.all():
-                if transaction.transaction_type == 'delivered':
-                    bottle.status = 'delivered'
-                elif transaction.transaction_type == 'returned':
-                    bottle.status = 'in_stock'
-                bottle.save()
+            # Save multiple photos
+            photos = request.FILES.getlist('photos')
+            for photo in photos:
+                print(f"Saving photo: {photo.name}")
+                TransactionPhoto.objects.create(transaction=transaction, image=photo)
+
+            # Update bottle status
+            bottles = transaction.bottles.all()
+            if transaction.transaction_type == 'delivered':
+                bottles.update(status='delivered')
+            elif transaction.transaction_type == 'returned':
+                bottles.update(status='in_stock')
             return redirect('transaction_list')
     else:
         form = TransactionForm(transaction_type=transaction_type)
@@ -189,6 +175,9 @@ def transaction_list(request):
         transactions = Transaction.objects.filter(delivered_by=request.user)
     else:
         transactions = Transaction.objects.all()
+    
+    transactions = transactions.order_by('-date')
+
     # Filtering
     client_id = request.GET.get('client')
     if client_id:
@@ -196,6 +185,7 @@ def transaction_list(request):
     transaction_type = request.GET.get('type')
     if transaction_type:
         transactions = transactions.filter(transaction_type=transaction_type)
+    transactions = transactions.prefetch_related('bottles')
     return render(request, 'transaction_list.html', {
         'transactions': transactions,
         'clients': Client.objects.all(),
@@ -252,10 +242,16 @@ def inventory_view(request):
     status = request.GET.get('status', '')
     code_query = request.GET.get('q', '')
     bottles = Bottle.objects.all().order_by('code')
+    category_id = request.GET.get('category', '')
+
     if status:
         bottles = bottles.filter(status=status)
     if code_query:
         bottles = bottles.filter(code__icontains=code_query)
+    if category_id: 
+        bottles = bottles.filter(category_id=category_id)
+
+    categories = BottleCategory.objects.all()
     total = bottles.count()
     in_stock = bottles.filter(status='in_stock').count()
     delivered = bottles.filter(status='delivered').count()
@@ -268,6 +264,8 @@ def inventory_view(request):
         'returned': returned,
         'status': status,
         'code_query': code_query,
+        'categories': categories,
+        'selected_category': category_id,
     })
 
 @staff_member_required
@@ -283,7 +281,8 @@ def add_bottles_view(request):
             for i in range(start, end + 1):
                 code = f"{series}-{i}"
                 if not Bottle.objects.filter(code=code).exists():
-                    Bottle.objects.create(code=code, status='in_stock')
+                    category = form.cleaned_data['category']
+                    Bottle.objects.create(code=code, status='in_stock', category=category)
                     created += 1
                 else:
                     duplicates.append(code)
@@ -296,6 +295,25 @@ def add_bottles_view(request):
         form = AddBottlesForm()
     return render(request, 'add_bottles.html', {'form': form})
 
+def calculate_bill(total_amount, discount_percentage=Decimal("0"), gst_percentage=Decimal("18")):
+    """
+    Calculate discount, GST, and final amount.
+    Returns dictionary with breakdown.
+    """
+    discount_amount = (total_amount * discount_percentage / Decimal("100")).quantize(Decimal("0.01"))
+    subtotal_after_discount = total_amount - discount_amount
+
+    gst_amount = (subtotal_after_discount * gst_percentage / Decimal("100")).quantize(Decimal("0.01"))
+    final_amount = subtotal_after_discount + gst_amount
+
+    return {
+        "discount_percentage": discount_percentage,
+        "discount_amount": discount_amount,
+        "gst_percentage": gst_percentage,
+        "gst_amount": gst_amount,
+        "final_amount": final_amount,
+    }
+    
 @staff_member_required
 def bottle_photos_view(request, code):
     bottle = Bottle.objects.get(code=code)
@@ -326,7 +344,7 @@ def custom_billing_view(request, client_id):
     transaction_type = request.GET.get('transaction_type', '')
     
     # Get all transactions for this client
-    transactions = Transaction.objects.filter(client=client).order_by('-date')
+    transactions = Transaction.objects.filter(client=client, transaction_type='delivered').order_by('-date')
     
     # Apply filters
     if start_date:
@@ -390,6 +408,14 @@ def create_custom_bill(request, client_id):
         messages.error(request, 'Please select at least one transaction to bill.')
         return redirect('custom_billing', client_id=client_id)
     
+    # Parse discount/gst (safe defaults)
+    try:
+        discount_percentage = Decimal(request.POST.get('discount', '0').strip() or '0')
+        gst_percentage = Decimal(request.POST.get('gst', '18').strip() or '18')
+    except Exception:
+        messages.error(request, 'Invalid discount or GST value.')
+        return redirect('custom_billing', client_id=client_id)
+    
     # Get selected transactions
     selected_transactions = Transaction.objects.filter(
         id__in=selected_transaction_ids,
@@ -406,47 +432,57 @@ def create_custom_bill(request, client_id):
     
     already_billed = [t for t in selected_transactions if t.id in custom_billed_transactions]
     if already_billed:
-        messages.error(request, f'Some transactions are already custom billed: {", ".join([str(t.id) for t in already_billed])}')
+        messages.error(
+            request,
+            f'Some transactions are already custom billed: {", ".join([str(t.id) for t in already_billed])}'
+        )        
         return redirect('custom_billing', client_id=client_id)
     
-    # Calculate bill amounts
-    delivered_count = selected_transactions.filter(transaction_type='delivered').count()
-    returned_count = selected_transactions.filter(transaction_type='returned').count()
-    pending_count = delivered_count - returned_count
-    
-    if pending_count <= 0:
-        messages.error(request, 'No pending bottles to bill. Delivered bottles must exceed returned bottles.')
-        return redirect('custom_billing', client_id=client_id)
-    
-    price = BottlePricing.get_solo().price
-    total_amount = pending_count * price
-    
+    # Quantities & price
+    total_bottles_delivered = sum(t.bottles.count() for t in selected_transactions)
+    price = BottlePricing.get_solo().price  # Decimal
+
+    # Totals (GST on taxable)
+    totals = compute_totals(
+        quantity=total_bottles_delivered,
+        price_per_bottle=price,
+        discount_pct=discount_percentage,
+        gst_pct=gst_percentage
+    )
+
     # Create custom bill
     bill = Bill.objects.create(
         client=client,
-        delivered_bottles=delivered_count,
-        returned_bottles=returned_count,
-        pending_bottles=pending_count,
+        delivered_bottles=total_bottles_delivered,
+        returned_bottles=0,
+        pending_bottles=total_bottles_delivered,
         price_per_bottle=price,
-        total_amount=total_amount,
+
+        # legacy subtotal
+        total_amount=totals['subtotal'],
+
+        # normalized
+        subtotal_amount=totals['subtotal'],
+        discount_percentage=totals['discount_pct'],
+        discount_amount=totals['discount_amount'],
+        taxable_amount=totals['taxable'],
+        gst_percentage=totals['gst_pct'],
+        gst_amount=totals['gst_amount'],
+        final_amount=totals['final'],
+
         generated_by=request.user,
         bill_type='custom',
         description=request.POST.get('description', 'Custom bill for selected transactions')
     )
-    
-    # Create BillTransaction records
-    bill_transactions = []
-    for transaction in selected_transactions:
-        bill_transactions.append(BillTransaction(bill=bill, transaction=transaction))
-    
+
+    # Link transactions
+    bill_transactions = [BillTransaction(bill=bill, transaction=txn) for txn in selected_transactions]
     BillTransaction.objects.bulk_create(bill_transactions)
-    
-    # Mark transactions as billed
+
+    # Mark as billed
     selected_transactions.update(billed=True)
-    
-    messages.success(request, f'Custom bill created successfully for {pending_count} pending bottles.')
-    
-    # Redirect to bill view
+
+    messages.success(request, f'Custom bill created successfully for {total_bottles_delivered} bottles.')
     return redirect('generate_bill', client_id=client_id, bill_id=bill.id)
 
 @staff_member_required
@@ -454,9 +490,9 @@ def generate_bill(request, client_id, bill_id=None):
     """Generate bill - modified to handle both auto and custom bills"""
     client = get_object_or_404(Client, id=client_id)
     admin_client = Client.objects.filter(role='admin').first()
+    
 
     if bill_id:
-        # Show specific bill (custom or auto)
         bill = get_object_or_404(Bill, id=bill_id, client=client)
         context = {
             'client': client,
@@ -464,68 +500,122 @@ def generate_bill(request, client_id, bill_id=None):
             'returned': bill.returned_bottles,
             'pending': bill.pending_bottles,
             'price': bill.price_per_bottle,
-            'total': bill.total_amount,
+            'total': bill.total_amount,  # legacy subtotal
             'bill': bill,
             'bill_date': bill.bill_date,
             'is_custom': bill.bill_type == 'custom',
+            'discount': bill.discount_percentage,
+            'final_amount': bill.final_amount,
+            'admin_client': admin_client,  # pass admin details
         }
-        
-        # Check if PDF export is requested
         if request.GET.get('format') == 'pdf':
             return generate_pdf_bill(request, context)
-        
         return render(request, 'generate_bill.html', context)
+
+    if request.method != 'POST':
+        prefill_discount = request.GET.get('discount', '')
+        prefill_gst = request.GET.get('gst', '18')
+        return render(request, "ask_discount.html", {
+            'client': client,
+            'prefill_discount': prefill_discount,
+            'prefill_gst': prefill_gst
+        })
+        
+    try:
+        discount_percentage = Decimal(request.POST.get("discount", "0").strip() or "0")
+    except Exception:
+        messages.error(request, "Invalid discount value.")
+        return redirect('generate_bill', client_id=client.id)
+
+    try:
+        gst_percentage = Decimal(request.POST.get("gst", "18").strip() or "18")
+    except Exception:
+        messages.error(request, "Invalid GST value.")
+        return redirect('generate_bill', client_id=client.id)
     
     # Original automated billing logic
-    # Only count unbilled transactions that are not in custom bills
-    delivered = Transaction.objects.filter(client=client, transaction_type='delivered', billed=False).count()
-    returned = Transaction.objects.filter(client=client, transaction_type='returned', billed=False).count()
-    pending = delivered - returned
-    price = BottlePricing.get_solo().price
-    total = pending * price
-    
-    # Check if there are any transactions to bill
-    if delivered == 0 and returned == 0:
-        messages.warning(request, 'No new transactions to bill for this client.')
+    delivered_txns = Transaction.objects.filter(
+        client=client, transaction_type='delivered', billed=False
+    )
+    delivered_txn_count = delivered_txns.count()
+    delivered_bottles = sum(t.bottles.count() for t in delivered_txns)  # ✅ correct
+
+    if delivered_txn_count == 0 or delivered_bottles == 0:
+        messages.warning(request, 'No new delivered transactions to bill for this client.')
         return redirect('client_list')
-    
-    # Save bill to database
+
+    returned_txns = Transaction.objects.filter(
+        client=client, transaction_type='returned', billed=False
+    )
+    returned_bottles = sum(t.bottles.count() for t in returned_txns)
+    pending_bottles = delivered_bottles - returned_bottles
+
+    price = BottlePricing.get_solo().price  # Decimal
+
+    # Totals (GST on taxable = subtotal - discount)
+    totals = compute_totals(
+        quantity=delivered_bottles,
+        price_per_bottle=price,
+        discount_pct=discount_percentage,
+        gst_pct=gst_percentage
+    )
+
     bill = Bill.objects.create(
         client=client,
-        delivered_bottles=delivered,
-        returned_bottles=returned,
-        pending_bottles=pending,
+        delivered_bottles=delivered_bottles,            # ✅ store bottle count, not txn count
+        returned_bottles=returned_bottles,
+        pending_bottles=pending_bottles,
         price_per_bottle=price,
-        total_amount=total,
+
+        # legacy subtotal (keep name for old template bits)
+        total_amount=totals['subtotal'],
+
+        # normalized new fields
+        subtotal_amount=totals['subtotal'],
+        discount_percentage=totals['discount_pct'],
+        discount_amount=totals['discount_amount'],
+        taxable_amount=totals['taxable'],
+        gst_percentage=totals['gst_pct'],
+        gst_amount=totals['gst_amount'],
+        final_amount=totals['final'],
+
         generated_by=request.user,
         bill_type='auto'
     )
-    
-    # Mark all unbilled transactions as billed (excluding those already in custom bills)
+
+    # Mark all unbilled as billed (except ones already in custom bills)
     Transaction.objects.filter(
-        client=client, 
+        client=client,
         billed=False
     ).exclude(
-        id__in=BillTransaction.objects.filter(bill__client=client, bill__bill_type='custom').values_list('transaction_id', flat=True)
+        id__in=BillTransaction.objects.filter(
+            bill__client=client, bill__bill_type='custom'
+        ).values_list('transaction_id', flat=True)
     ).update(billed=True)
-    
+
     context = {
         'client': client,
-        'delivered': delivered,
-        'returned': returned,
-        'pending': pending,
+        'delivered': delivered_bottles,
+        'returned': returned_bottles,
+        'pending': pending_bottles,
         'price': price,
-        'total': total,
+        'total': bill.total_amount,
         'bill': bill,
         'bill_date': bill.bill_date,
         'is_custom': False,
+        'discount': bill.discount_percentage,
+        'final_amount': bill.final_amount,
+        'admin_client': admin_client,  # pass admin details
     }
-    
-    # Check if PDF export is requested
     if request.GET.get('format') == 'pdf':
         return generate_pdf_bill(request, context)
-    
     return render(request, 'generate_bill.html', context)
+
+def _fmt_money(val):
+    try:
+        return f"₹{Decimal(val):.2f}"
+    except Exception:
+        return f"₹{val}"
 
 def generate_pdf_bill(request, context):
     """Generate PDF version of the bill"""
@@ -661,23 +751,37 @@ def sales_analytics(request):
     def get_sales_data(bills_qs):
         total_bills = bills_qs.count()
         total_amount = bills_qs.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        total_bottles_delivered = bills_qs.aggregate(Sum('delivered_bottles'))['delivered_bottles__sum'] or 0
-        total_bottles_returned = bills_qs.aggregate(Sum('returned_bottles'))['returned_bottles__sum'] or 0
-        total_pending_bottles = bills_qs.aggregate(Sum('pending_bottles'))['pending_bottles__sum'] or 0
+        
+        # Fetch transactions linked to these bills
+        transactions = Transaction.objects.filter(
+            bill_transactions__bill__in=bills_qs
+        ).prefetch_related('bottles')
+
+        # Bottle counts
+        delivered_bottles = sum(
+            t.bottles.count() for t in transactions if t.transaction_type == 'delivered'
+        )
+        returned_bottles = sum(
+            t.bottles.count() for t in transactions if t.transaction_type == 'returned'
+        )
+        pending_bottles = delivered_bottles - returned_bottles
+
+        # Payment info (still from Bill)
         paid_bills = bills_qs.filter(paid=True)
         paid_amount = paid_bills.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
         unpaid_amount = total_amount - paid_amount
-        
+
         return {
             'total_bills': total_bills,
             'total_amount': total_amount,
-            'total_bottles_delivered': total_bottles_delivered,
-            'total_bottles_returned': total_bottles_returned,
-            'total_pending_bottles': total_pending_bottles,
+            'total_bottles_delivered': delivered_bottles,
+            'total_bottles_returned': returned_bottles,
+            'total_pending_bottles': pending_bottles,
             'paid_amount': paid_amount,
             'unpaid_amount': unpaid_amount,
             'payment_rate': (paid_amount / total_amount * 100) if total_amount > 0 else 0
         }
+
     
     # Daily, Weekly, Monthly, Yearly sales
     daily_sales = get_sales_data(all_bills.filter(bill_date__date=today))
@@ -706,9 +810,18 @@ def sales_analytics(request):
     clients = Client.objects.all()
     for client in clients:
         client_bills = all_bills.filter(client=client)
-        total_delivered = client_bills.aggregate(Sum('delivered_bottles'))['delivered_bottles__sum'] or 0
-        total_returned = client_bills.aggregate(Sum('returned_bottles'))['returned_bottles__sum'] or 0
+        transactions = Transaction.objects.filter(
+            bill_transactions__bill__in=client_bills
+        ).prefetch_related('bottles')
+
+        total_delivered = sum(
+            t.bottles.count() for t in transactions if t.transaction_type == 'delivered'
+        )
+        total_returned = sum(
+            t.bottles.count() for t in transactions if t.transaction_type == 'returned'
+        )
         total_pending = total_delivered - total_returned
+        
         total_amount = client_bills.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
         paid_amount = client_bills.filter(paid=True).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
         unpaid_amount = total_amount - paid_amount
@@ -732,9 +845,15 @@ def sales_analytics(request):
     for month in range(1, 13):
         month_start = datetime(selected_year, month, 1).date()
         month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        
         month_bills = all_bills.filter(bill_date__date__range=[month_start, month_end])
+        transactions = Transaction.objects.filter(
+            bill_transactions__bill__in=month_bills
+        ).prefetch_related('bottles')
+
         month_amount = month_bills.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
-        month_bottles = month_bills.aggregate(Sum('delivered_bottles'))['delivered_bottles__sum'] or 0
+        month_bottles = sum(t.bottles.count() for t in transactions if t.transaction_type == 'delivered')
+
         monthly_trend.append({
             'month': calendar.month_name[month],
             'amount': month_amount,
