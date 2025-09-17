@@ -194,15 +194,6 @@
                                     <small class="text-muted">{{ delivered_percent }}%</small>
                                 </div>
                             </div>
-                            <div class="col-4">
-                                <div class="progress-circle bg-info text-white">
-                                    {{ returned_stock }}
-                                </div>
-                                <div class="mt-2">
-                                    <strong>Returned</strong><br>
-                                    <small class="text-muted">{{ returned_percent }}%</small>
-                                </div>
-                            </div>
                         </div>
                         <div class="mt-3">
                             <div class="progress">
@@ -384,50 +375,61 @@
             </div>
         </div>
 
-        <!-- Recent Transactions -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-warning text-dark">
-                        <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Recent Transactions</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-sm">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Client</th>
-                                        <th>Bill #</th>
-                                        <th>Amount</th>
-                                        <th>Bottles</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for bill in recent_bills %}
-                                    <tr>
-                                        <td>{{ bill.bill_date|date:"M d, Y" }}</td>
-                                        <td>{{ bill.client.name }}</td>
-                                        <td>#{{ bill.id }}</td>
-                                        <td><strong>₹{{ bill.total_amount|floatformat:0 }}</strong></td>
-                                        <td>{{ bill.delivered_bottles }}D, {{ bill.returned_bottles }}R</td>
-                                        <td>
-                                            {% if bill.paid %}
-                                                <span class="badge bg-success">Paid</span>
-                                            {% else %}
-                                                <span class="badge bg-warning">Unpaid</span>
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
+<!-- Recent Transactions (replace the older recent_bills section) -->
+<div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-warning text-dark">
+          <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Recent Transactions</h5>
         </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead class="table-light">
+                <tr>
+                  <th>Date</th>
+                  <th>Client</th>
+                  <th>Type</th>
+                  <th>Bill #</th>
+                  <th>Amount</th>
+                  <th>Bottles</th>
+                  <th>By</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for txn in recent_transactions %}
+                <tr>
+                  <td>{{ txn.date|date:"M d, Y H:i" }}</td>
+                  <td>{{ txn.client_name }}</td>
+                  <td>{{ txn.type|title }}</td>
+                  <td>
+                    {% if txn.billed %}
+                      <a href="{% url 'generate_bill' txn.client.id txn.bill_id %}">#{{ txn.bill_id }}</a>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td><strong>₹{{ txn.amount|floatformat:2 }}</strong></td>
+                  <td>{{ txn.bottles }}</td>
+                  <td>{{ txn.delivered_by|default:"-" }}</td>
+                  <td>
+                    {% if txn.billed %}
+                      <span class="badge bg-success">Billed</span>
+                    {% else %}
+                      <span class="badge bg-warning text-dark">Unbilled</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
 {% endblock %}
 
 {% block extra_js %}
