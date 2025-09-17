@@ -38,6 +38,7 @@ class AdminProfileForm(forms.ModelForm):
         if not contact.isdigit() or len(contact) != 10:
             raise forms.ValidationError('Contact number must be exactly 10 digits.')
         return contact
+
 class TransactionForm(forms.ModelForm):
     class Meta:
         model = Transaction
@@ -53,16 +54,17 @@ class TransactionForm(forms.ModelForm):
         transaction_type = kwargs.pop('transaction_type', None)
         super().__init__(*args, **kwargs)
         
-        # Make custom_date optional
         self.fields['custom_date'].required = False
         self.fields['custom_date'].help_text = "Optional: Leave blank to use current date/time"
         
         if transaction_type == 'delivered':
             self.fields['bottles'].queryset = Bottle.objects.filter(status='in_stock')
         elif transaction_type == 'returned':
-            self.fields['bottles'].queryset = Bottle.objects.filter(status='delivered')
+            # Initially empty; filtered by client via AJAX
+            self.fields['bottles'].queryset = Bottle.objects.none()
         else:
             self.fields['bottles'].queryset = Bottle.objects.all()
+
 
 class BottlePricingForm(forms.ModelForm):
     class Meta:

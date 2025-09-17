@@ -28,6 +28,7 @@ urlpatterns = [
     path('clients/create/', views.client_create, name='client_create'),
     path('transactions/', views.transaction_list, name='transaction_list'),
     path('transactions/create/', views.transaction_create, name='transaction_create'),
+    path('ajax/get-client-bottles/', views.get_client_bottles, name='get_client_bottles'),
     path('reports/', views.reports_view, name='reports'),
     path('inventory/', views.inventory_view, name='inventory'),
     path('inventory/add-bottles/', views.add_bottles_view, name='add_bottles'),

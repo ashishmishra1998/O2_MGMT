@@ -29,6 +29,7 @@ from reportlab.lib import colors
 from reportlab.lib.utils import ImageReader
 from django.db import transaction as db_transaction
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from django.http import JsonResponse
 
 
 # Ensure admin and delivery boy users exist
@@ -131,72 +132,110 @@ def client_list(request):
         clients = Client.objects.filter(name__icontains=query)
     else:
         clients = Client.objects.all()
-    # Add stats for each client
-    from .models import Transaction
+
     client_stats = []
     for client in clients:
-        delivered_bottles = sum(
-            t.bottles.count() for t in Transaction.objects.filter(client=client, transaction_type='delivered')
-        )
-        # Count bottles for returned transactions
-        returned_bottles = sum(
-            t.bottles.count() for t in Transaction.objects.filter(client=client, transaction_type='returned')
-        )
+        # Delivered transactions
+        delivered_txns = Transaction.objects.filter(client=client, transaction_type='delivered')
+        delivered_bottles = sum(t.bottles.count() for t in delivered_txns)
+
+        # Returned transactions
+        returned_txns = Transaction.objects.filter(client=client, transaction_type='returned')
+        returned_bottles = sum(t.bottles.count() for t in returned_txns)
+
         pending_bottles = delivered_bottles - returned_bottles
-        
-        # Total bottles in delivered transactions that are not yet billed
+
+        # Get actual list of pending bottles
+        pending_bottles_list = Bottle.objects.filter(
+            transaction__client=client,
+            status="delivered"  # still with client
+        ).select_related("category")
+
+        # Unbilled bottles
         pending_bill_bottles = sum(
-            t.bottles.count() for t in Transaction.objects.filter(
-                client=client,
-                transaction_type='delivered',
-                billed=False
-            )
+            t.bottles.count() for t in delivered_txns.filter(billed=False)
         )
+
         client_stats.append({
             'client': client,
             'delivered': delivered_bottles,
             'returned': returned_bottles,
             'pending': pending_bottles,
+            'pending_bottles_list': pending_bottles_list,
             'pending_bill_bottles': pending_bill_bottles,
         })
-    return render(request, 'client_list.html', {'clients': clients, 'query': query, 'client_stats': client_stats})  
 
+    return render(request, 'client_list.html', {
+        'clients': clients,
+        'query': query,
+        'client_stats': client_stats
+    })
+    
+@login_required
+def get_client_bottles(request):
+    client_id = request.GET.get('client_id')
+    transaction_type = request.GET.get('transaction_type')
+    bottles_data = []
+
+    if client_id and transaction_type == 'returned':
+        # Bottles delivered to this client, still marked delivered
+        bottles = Bottle.objects.filter(
+            transaction__client_id=client_id,
+            transaction__transaction_type='delivered',
+            status='delivered'
+        ).distinct()
+
+        for bottle in bottles:
+            bottles_data.append({'id': bottle.id, 'name': bottle.code})  # adjust 'code' if needed
+
+    return JsonResponse({'bottles': bottles_data})
+  
 @login_required
 def transaction_create(request):
     transaction_type = request.GET.get('transaction_type')
     if not transaction_type:
-        # Show a simple form to select transaction type
         return render(request, 'transaction_type_select.html')
+
     message = None
     if request.method == 'POST':
         form = TransactionForm(request.POST, request.FILES, transaction_type=transaction_type)
+
+        # Fix: update bottles queryset based on client for returned transactions
+        if transaction_type == 'returned' and 'client' in request.POST:
+            client_id = request.POST['client']
+            form.fields['bottles'].queryset = Bottle.objects.filter(
+                transaction__client_id=client_id,
+                transaction__transaction_type='delivered',
+                status='delivered'
+            ).distinct()
+
         if form.is_valid():
             transaction = form.save(commit=False)
             transaction.delivered_by = request.user
             transaction.save()
             form.save_m2m()
-            
-            # Save multiple photos
+
             photos = request.FILES.getlist('photos')
             for photo in photos:
-                print(f"Saving photo: {photo.name}")
                 TransactionPhoto.objects.create(transaction=transaction, image=photo)
 
-            # Update bottle status
             bottles = transaction.bottles.all()
             if transaction.transaction_type == 'delivered':
                 bottles.update(status='delivered')
             elif transaction.transaction_type == 'returned':
                 bottles.update(status='in_stock')
+
             return redirect('transaction_list')
     else:
         form = TransactionForm(transaction_type=transaction_type)
-        if not form.fields['bottles'].queryset.exists():
-            if transaction_type == 'delivered':
-                message = 'No bottles available in stock for delivery.'
-            elif transaction_type == 'returned':
-                message = 'No bottles currently with clients for return.'
-    return render(request, 'transaction_create.html', {'form': form, 'transaction_type': transaction_type, 'message': message})
+        if transaction_type == 'delivered' and not form.fields['bottles'].queryset.exists():
+            message = 'No bottles available in stock for delivery.'
+
+    return render(request, 'transaction_create.html', {
+        'form': form,
+        'transaction_type': transaction_type,
+        'message': message
+    })
 
 @login_required
 def transaction_list(request):

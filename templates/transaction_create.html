@@ -32,6 +32,11 @@
             <label for="id_bottle" class="form-label" multiple=multiple>Bottles</label>
             {{ form.bottles|add_class:'form-select select2-multiple' }}
             {{ form.bottles.errors }}
+            <div id="bottle-loader" style="display:none; margin-top:5px;">
+                <div class="spinner-border text-primary" role="status" style="width: 1.5rem; height: 1.5rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div> Loading bottles...
+            </div>
         </div>
         <div class="mb-3">
             <label for="id_custom_date" class="form-label">Transaction Date & Time (Optional)</label>
@@ -44,7 +49,7 @@
             <label for="photos" class="form-label">Upload Photos</label>
             <input type="file" name="photos" id="photos" class="form-control" multiple>
         </div>
-        <button type="submit" class="btn btn-success" {% if not form.fields.bottles.queryset.exists %}disabled{% endif %}>Submit</button>
+        <button type="submit" id="submit-btn" class="btn btn-success" {% if not form.fields.bottles.queryset.exists %}disabled{% endif %}>Submit</button>
         <a href="{% url 'transaction_create' %}" class="btn btn-secondary">Back to Type Selection</a>
         <a href="{% url 'transaction_list' %}" class="btn btn-secondary">Back to List</a>
     </form>
@@ -64,4 +69,55 @@
         });
     });
 </script>
+<script>
+    $(document).ready(function() {
+        let $bottleSelect = $('#id_bottles');
+        let $submitBtn = $('#submit-btn');
+        let $loader = $('#bottle-loader');
+    
+        function updateBottles(clientId) {
+            let transactionType = "{{ transaction_type }}";
+    
+            $loader.show();
+            $bottleSelect.prop('disabled', true);
+            $submitBtn.prop('disabled', true);
+    
+            $.ajax({
+                url: "{% url 'get_client_bottles' %}",
+                data: {
+                    'client_id': clientId,
+                    'transaction_type': transactionType
+                },
+                success: function(data) {
+                    $bottleSelect.empty();
+                    $.each(data.bottles, function(i, bottle) {
+                        $bottleSelect.append(new Option(bottle.name, bottle.id));
+                    });
+                    $bottleSelect.trigger('change');
+                },
+                complete: function() {
+                    $loader.hide();
+                    $bottleSelect.prop('disabled', false);
+    
+                    // Enable submit only if bottles available
+                    if ($bottleSelect.find('option').length > 0) {
+                        $submitBtn.prop('disabled', false);
+                    } else {
+                        $submitBtn.prop('disabled', true);
+                    }
+                }
+            });
+        }
+    
+        $('#id_client').change(function() {
+            let clientId = $(this).val();
+            if(clientId && "{{ transaction_type }}" === "returned") {
+                updateBottles(clientId);
+            }
+        });
+    });
+    
+</script>
+    
+    
 {% endblock %}
