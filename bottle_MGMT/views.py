@@ -23,9 +23,11 @@ from io import BytesIO
 from django.db.models import Q
 from datetime import datetime
 from decimal import Decimal
-from .utils import compute_totals
+from .utils import compute_totals, get_next_challan_number, compute_totals_from_subtotal, build_transaction_rows
 from reportlab.lib import colors
 from reportlab.lib.utils import ImageReader
+from django.db import transaction as db_transaction
+
 
 # Ensure admin and delivery boy users exist
 ADMIN_USERNAME = 'admin'
@@ -397,121 +399,153 @@ def custom_billing_view(request, client_id):
 
 @staff_member_required
 def create_custom_bill(request, client_id):
-    """Create a custom bill with selected transactions"""
     if request.method != 'POST':
         return redirect('custom_billing', client_id=client_id)
-    
+
     client = get_object_or_404(Client, id=client_id)
     selected_transaction_ids = request.POST.getlist('selected_transactions')
-    
     if not selected_transaction_ids:
         messages.error(request, 'Please select at least one transaction to bill.')
         return redirect('custom_billing', client_id=client_id)
-    
-    # Parse discount/gst (safe defaults)
+
     try:
         discount_percentage = Decimal(request.POST.get('discount', '0').strip() or '0')
         gst_percentage = Decimal(request.POST.get('gst', '18').strip() or '18')
     except Exception:
         messages.error(request, 'Invalid discount or GST value.')
         return redirect('custom_billing', client_id=client_id)
-    
-    # Get selected transactions
-    selected_transactions = Transaction.objects.filter(
-        id__in=selected_transaction_ids,
-        client=client
-    )
-    
-    # Check if any transactions are already custom billed
-    custom_billed_transactions = set()
-    custom_bills = Bill.objects.filter(client=client, bill_type='custom')
-    for bill in custom_bills:
-        custom_billed_transactions.update(
-            bill.bill_transactions.values_list('transaction_id', flat=True)
-        )
-    
-    already_billed = [t for t in selected_transactions if t.id in custom_billed_transactions]
+
+    selected_transactions = Transaction.objects.filter(id__in=selected_transaction_ids, client=client).order_by('date')
+    # prevent double custom-billing
+    already_custom_ids = BillTransaction.objects.filter(bill__client=client, bill__bill_type='custom').values_list('transaction_id', flat=True)
+    already_billed = [t for t in selected_transactions if t.id in already_custom_ids]
     if already_billed:
-        messages.error(
-            request,
-            f'Some transactions are already custom billed: {", ".join([str(t.id) for t in already_billed])}'
-        )        
+        messages.error(request, f"Some transactions are already custom billed: {', '.join(str(t.id) for t in already_billed)}")
         return redirect('custom_billing', client_id=client_id)
-    
-    # Quantities & price
-    total_bottles_delivered = sum(t.bottles.count() for t in selected_transactions)
-    price = BottlePricing.get_solo().price  # Decimal
 
-    # Totals (GST on taxable)
-    totals = compute_totals(
-        quantity=total_bottles_delivered,
-        price_per_bottle=price,
-        discount_pct=discount_percentage,
-        gst_pct=gst_percentage
-    )
+    # Build itemized rows and compute subtotal correctly from per-row rates
+    transaction_rows, subtotal = build_transaction_rows(selected_transactions, admin_client)
 
-    # Create custom bill
-    bill = Bill.objects.create(
-        client=client,
-        delivered_bottles=total_bottles_delivered,
-        returned_bottles=0,
-        pending_bottles=total_bottles_delivered,
-        price_per_bottle=price,
 
-        # legacy subtotal
-        total_amount=totals['subtotal'],
+    # Compute totals from subtotal (accurately reflects row sums)
+    totals = compute_totals_from_subtotal(subtotal=subtotal, discount_pct=discount_percentage, gst_pct=gst_percentage)
 
-        # normalized
-        subtotal_amount=totals['subtotal'],
-        discount_percentage=totals['discount_pct'],
-        discount_amount=totals['discount_amount'],
-        taxable_amount=totals['taxable'],
-        gst_percentage=totals['gst_pct'],
-        gst_amount=totals['gst_amount'],
-        final_amount=totals['final'],
+    # Create bill (legacy total_amount set to subtotal)
+    with db_transaction.atomic():
+        bill = Bill.objects.create(
+            client=client,
+            delivered_bottles=sum(r['qty'] for r in transaction_rows),
+            returned_bottles=0,
+            pending_bottles=sum(r['qty'] for r in transaction_rows),
+            price_per_bottle=BottlePricing.get_solo().price,
 
-        generated_by=request.user,
-        bill_type='custom',
-        description=request.POST.get('description', 'Custom bill for selected transactions')
-    )
+            total_amount=totals['subtotal'],
 
-    # Link transactions
-    bill_transactions = [BillTransaction(bill=bill, transaction=txn) for txn in selected_transactions]
-    BillTransaction.objects.bulk_create(bill_transactions)
+            subtotal_amount=totals['subtotal'],
+            discount_percentage=totals['discount_pct'],
+            discount_amount=totals['discount_amount'],
+            taxable_amount=totals['taxable'],
+            gst_percentage=totals['gst_pct'],
+            gst_amount=totals['gst_amount'],
+            final_amount=totals['final'],
 
-    # Mark as billed
-    selected_transactions.update(billed=True)
+            generated_by=request.user,
+            bill_type='custom',
+            description=request.POST.get('description', 'Custom bill for selected transactions')
+        )
 
-    messages.success(request, f'Custom bill created successfully for {total_bottles_delivered} bottles.')
-    return redirect('generate_bill', client_id=client_id, bill_id=bill.id)
+        # Assign challan numbers and persist BillTransaction rows
+        next_challan = get_next_challan_number()
+        bt_objs = []
+        for txn in selected_transactions:
+            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=next_challan))
+            for row in transaction_rows:
+                if row['txn'] == txn:
+                    row['challan_no'] = next_challan
+            next_challan += 1
+        BillTransaction.objects.bulk_create(bt_objs)
+
+        # mark selected txns billed
+        selected_transaction_ids_list = [t.id for t in selected_transactions]
+        Transaction.objects.filter(id__in=selected_transaction_ids_list).update(billed=True)
+
+    # Sort rows by date ascending for display
+    transaction_rows.sort(key=lambda x: x['date'])
+
+    # prepare context fields for template
+    cgst_amount = (totals['gst_amount'] / Decimal('2')).quantize(Decimal('0.01')) if totals['gst_amount'] else Decimal('0.00')
+    sgst_amount = cgst_amount
+    cgst_percentage = (totals['gst_pct'] / Decimal('2')).quantize(Decimal('0.01')) if totals['gst_pct'] else Decimal('0.00')
+    sgst_percentage = cgst_percentage
+
+    context = {
+        'client': client,
+        'bill': bill,
+        'transaction_rows': transaction_rows,
+        'cgst_amount': cgst_amount,
+        'sgst_amount': sgst_amount,
+        'cgst_percentage': cgst_percentage,
+        'sgst_percentage': sgst_percentage,
+        'admin_client': Client.objects.filter(role='admin').first(),
+    }
+    if request.GET.get('format') == 'pdf':
+        return generate_pdf_bill(request, context)
+    return render(request, 'generate_bill.html', context)
+
 
 @staff_member_required
 def generate_bill(request, client_id, bill_id=None):
-    """Generate bill - modified to handle both auto and custom bills"""
-    client = get_object_or_404(Client, id=client_id)
     admin_client = Client.objects.filter(role='admin').first()
-    
+    client = get_object_or_404(Client, id=client_id)
 
     if bill_id:
+        # Render existing bill
         bill = get_object_or_404(Bill, id=bill_id, client=client)
+        bts = BillTransaction.objects.filter(bill=bill).select_related('transaction').order_by('transaction__date', 'created_at')
+        txns = [bt.transaction for bt in bts]
+
+        transaction_rows, subtotal = build_transaction_rows(txns, admin_client)
+        for row in transaction_rows:
+            bt = next(bt for bt in bts if bt.transaction_id == row['txn'].id)
+            row['challan_no'] = bt.challan_number
+        # Compute totals based on actual subtotal (if bill already has fields, keep them consistent)
+        # Use bill fields if present; otherwise compute from subtotal
+        if getattr(bill, 'subtotal_amount', None):
+            totals = {
+                'subtotal': bill.subtotal_amount,
+                'discount_pct': bill.discount_percentage,
+                'discount_amount': bill.discount_amount,
+                'taxable': bill.taxable_amount,
+                'gst_pct': bill.gst_percentage,
+                'gst_amount': bill.gst_amount,
+                'final': bill.final_amount
+            }
+        else:
+            totals = compute_totals_from_subtotal(subtotal=subtotal, discount_pct=bill.discount_percentage or Decimal('0'), gst_pct=bill.gst_percentage or Decimal('0'))
+
+        cgst_amount = (Decimal(totals['gst_amount']) / Decimal('2')).quantize(Decimal('0.01')) if totals['gst_amount'] else Decimal('0.00')
+        sgst_amount = cgst_amount
+        cgst_percentage = (Decimal(totals['gst_pct']) / Decimal('2')).quantize(Decimal('0.01')) if totals['gst_pct'] else Decimal('0.00')
+        sgst_percentage = cgst_percentage
+
+        # ensure rows sorted ascending
+        transaction_rows.sort(key=lambda x: x['date'])
+
         context = {
             'client': client,
-            'delivered': bill.delivered_bottles,
-            'returned': bill.returned_bottles,
-            'pending': bill.pending_bottles,
-            'price': bill.price_per_bottle,
-            'total': bill.total_amount,  # legacy subtotal
             'bill': bill,
-            'bill_date': bill.bill_date,
-            'is_custom': bill.bill_type == 'custom',
-            'discount': bill.discount_percentage,
-            'final_amount': bill.final_amount,
-            'admin_client': admin_client,  # pass admin details
+            'transaction_rows': transaction_rows,
+            'cgst_amount': cgst_amount,
+            'sgst_amount': sgst_amount,
+            'cgst_percentage': cgst_percentage,
+            'sgst_percentage': sgst_percentage,
+            'admin_client': admin_client,
         }
         if request.GET.get('format') == 'pdf':
             return generate_pdf_bill(request, context)
         return render(request, 'generate_bill.html', context)
 
+    # ----- Auto bill creation flow -----
     if request.method != 'POST':
         prefill_discount = request.GET.get('discount', '')
         prefill_gst = request.GET.get('gst', '18')
@@ -520,96 +554,99 @@ def generate_bill(request, client_id, bill_id=None):
             'prefill_discount': prefill_discount,
             'prefill_gst': prefill_gst
         })
-        
+
     try:
         discount_percentage = Decimal(request.POST.get("discount", "0").strip() or "0")
-    except Exception:
-        messages.error(request, "Invalid discount value.")
-        return redirect('generate_bill', client_id=client.id)
-
-    try:
         gst_percentage = Decimal(request.POST.get("gst", "18").strip() or "18")
     except Exception:
-        messages.error(request, "Invalid GST value.")
+        messages.error(request, "Invalid discount or GST value.")
         return redirect('generate_bill', client_id=client.id)
-    
-    # Original automated billing logic
-    delivered_txns = Transaction.objects.filter(
-        client=client, transaction_type='delivered', billed=False
-    )
-    delivered_txn_count = delivered_txns.count()
-    delivered_bottles = sum(t.bottles.count() for t in delivered_txns)  # ✅ correct
 
-    if delivered_txn_count == 0 or delivered_bottles == 0:
+    delivered_txns = Transaction.objects.filter(client=client, transaction_type='delivered', billed=False).order_by('date')
+    if not delivered_txns.exists():
         messages.warning(request, 'No new delivered transactions to bill for this client.')
         return redirect('client_list')
 
-    returned_txns = Transaction.objects.filter(
-        client=client, transaction_type='returned', billed=False
-    )
-    returned_bottles = sum(t.bottles.count() for t in returned_txns)
-    pending_bottles = delivered_bottles - returned_bottles
+    # Build rows and compute subtotal using per-transaction rates
+    transaction_rows, subtotal = build_transaction_rows(delivered_txns, admin_client)
 
-    price = BottlePricing.get_solo().price  # Decimal
 
-    # Totals (GST on taxable = subtotal - discount)
-    totals = compute_totals(
-        quantity=delivered_bottles,
-        price_per_bottle=price,
-        discount_pct=discount_percentage,
-        gst_pct=gst_percentage
-    )
+    totals = compute_totals_from_subtotal(subtotal=subtotal, discount_pct=discount_percentage, gst_pct=gst_percentage)
 
-    bill = Bill.objects.create(
-        client=client,
-        delivered_bottles=delivered_bottles,            # ✅ store bottle count, not txn count
-        returned_bottles=returned_bottles,
-        pending_bottles=pending_bottles,
-        price_per_bottle=price,
+    with db_transaction.atomic():
+        bill = Bill.objects.create(
+            client=client,
+            delivered_bottles=sum(r['qty'] for r in transaction_rows),
+            returned_bottles=0,
+            pending_bottles=sum(r['qty'] for r in transaction_rows),
+            price_per_bottle=BottlePricing.get_solo().price,
 
-        # legacy subtotal (keep name for old template bits)
-        total_amount=totals['subtotal'],
+            total_amount=totals['subtotal'],
 
-        # normalized new fields
-        subtotal_amount=totals['subtotal'],
-        discount_percentage=totals['discount_pct'],
-        discount_amount=totals['discount_amount'],
-        taxable_amount=totals['taxable'],
-        gst_percentage=totals['gst_pct'],
-        gst_amount=totals['gst_amount'],
-        final_amount=totals['final'],
+            subtotal_amount=totals['subtotal'],
+            discount_percentage=totals['discount_pct'],
+            discount_amount=totals['discount_amount'],
+            taxable_amount=totals['taxable'],
+            gst_percentage=totals['gst_pct'],
+            gst_amount=totals['gst_amount'],
+            final_amount=totals['final'],
 
-        generated_by=request.user,
-        bill_type='auto'
-    )
+            generated_by=request.user,
+            bill_type='auto'
+        )
 
-    # Mark all unbilled as billed (except ones already in custom bills)
-    Transaction.objects.filter(
-        client=client,
-        billed=False
-    ).exclude(
-        id__in=BillTransaction.objects.filter(
-            bill__client=client, bill__bill_type='custom'
-        ).values_list('transaction_id', flat=True)
-    ).update(billed=True)
+        # assign challan numbers and create BillTransaction rows
+        next_challan = get_next_challan_number()
+        bt_objs = []
+        for txn in delivered_txns:
+            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=next_challan))
+            for row in transaction_rows:
+                if row['txn'] == txn:
+                    row['challan_no'] = next_challan
+            next_challan += 1
+        BillTransaction.objects.bulk_create(bt_objs)
+
+        # mark as billed (exclude custom-linked)
+        Transaction.objects.filter(client=client, billed=False).exclude(
+            id__in=BillTransaction.objects.filter(bill__client=client, bill__bill_type='custom').values_list('transaction_id', flat=True)
+        ).update(billed=True)
+
+    # sort rows
+    transaction_rows.sort(key=lambda x: x['date'])
+
+    cgst_amount = (totals['gst_amount'] / Decimal('2')).quantize(Decimal('0.01')) if totals['gst_amount'] else Decimal('0.00')
+    sgst_amount = cgst_amount
+    cgst_percentage = (totals['gst_pct'] / Decimal('2')).quantize(Decimal('0.01')) if totals['gst_pct'] else Decimal('0.00')
+    sgst_percentage = cgst_percentage
 
     context = {
         'client': client,
-        'delivered': delivered_bottles,
-        'returned': returned_bottles,
-        'pending': pending_bottles,
-        'price': price,
-        'total': bill.total_amount,
         'bill': bill,
-        'bill_date': bill.bill_date,
-        'is_custom': False,
-        'discount': bill.discount_percentage,
-        'final_amount': bill.final_amount,
-        'admin_client': admin_client,  # pass admin details
+        'transaction_rows': transaction_rows,
+        'cgst_amount': cgst_amount,
+        'sgst_amount': sgst_amount,
+        'cgst_percentage': cgst_percentage,
+        'sgst_percentage': sgst_percentage,
+        'admin_client': admin_client,
     }
+
     if request.GET.get('format') == 'pdf':
         return generate_pdf_bill(request, context)
     return render(request, 'generate_bill.html', context)
+# Helper used above
+def default_rate_for_transaction(txn: Transaction):
+    """
+    Determine per-transaction rate:
+    - If the bottle category has price set -> use it
+    - Else fallback to BottlePricing.get_solo().price
+    """
+    if txn.bottles.exists():
+        first_bottle = txn.bottles.first()
+        if hasattr(first_bottle, 'category') and first_bottle.category:
+            cat = first_bottle.category
+            if getattr(cat, 'price', None) is not None:
+                return cat.price
+    return BottlePricing.get_solo().price
 
 def _fmt_money(val):
     try:

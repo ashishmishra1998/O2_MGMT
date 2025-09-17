@@ -32,12 +32,17 @@ class Client(models.Model):
     vpa = models.CharField("Virtual Payment Address", max_length=100, blank=True, null=True)
     upi_number = models.CharField(max_length=15, blank=True, null=True)
     upi_qr = models.ImageField(upload_to="upi_qr/", blank=True, null=True)
+    
+    # NEW: Admin-configurable HSN & C.U.M placeholders
+    hsn_code = models.CharField(max_length=20, blank=True, null=True, default="28044090")
+    cum_value = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal('7.00'))
 
     def __str__(self):
         return f"{self.name} ({self.role})"
 
 class BottleCategory(models.Model):
     name = models.CharField(max_length=50, unique=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -136,6 +141,8 @@ class BillTransaction(models.Model):
     """Model to track which transactions are included in custom bills"""
     bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name='bill_transactions')
     transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, related_name='bill_transactions')
+    challan_number = models.IntegerField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
