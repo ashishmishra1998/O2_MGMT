@@ -51,7 +51,6 @@ class Bottle(models.Model):
     STATUS_CHOICES = [
         ('in_stock', 'In Stock'),
         ('delivered', 'Delivered'),
-        ('returned', 'Returned'),
     ]
     code = models.CharField(max_length=10, unique=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='in_stock')

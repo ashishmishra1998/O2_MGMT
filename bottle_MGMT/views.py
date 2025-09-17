@@ -91,10 +91,22 @@ def admin_dashboard(request):
 
 
 def delivery_dashboard(request):
-    delivered = Transaction.objects.filter(delivered_by=request.user, transaction_type='delivered').count()
-    returned = Transaction.objects.filter(delivered_by=request.user, transaction_type='returned').count()
-    pending = delivered - returned
+    # Bottles delivered by this user
+    delivered = sum(
+        t.bottles.count()
+        for t in Transaction.objects.filter(delivered_by=request.user, transaction_type='delivered')
+    )
+
+    # Bottles returned (transactions created as 'returned')
+    returned = sum(
+        t.bottles.count()
+        for t in Transaction.objects.filter(delivered_by=request.user, transaction_type='returned')
+    )
+
+    pending = delivered - returned  # Bottles still with clients
+
     recent_transactions = Transaction.objects.filter(delivered_by=request.user).order_by('-date')[:5]
+
     return render(request, 'delivery_dashboard.html', {
         'delivered': delivered,
         'returned': returned,
@@ -1039,12 +1051,10 @@ def sales_analytics(request):
     total_stock = Bottle.objects.count()
     in_stock = Bottle.objects.filter(status='in_stock').count()
     delivered_stock = Bottle.objects.filter(status='delivered').count()
-    returned_stock = Bottle.objects.filter(status='returned').count()
     
     # Calculate percentages
     in_stock_percent = round((in_stock / total_stock * 100) if total_stock > 0 else 0, 1)
     delivered_percent = round((delivered_stock / total_stock * 100) if total_stock > 0 else 0, 1)
-    returned_percent = round((returned_stock / total_stock * 100) if total_stock > 0 else 0, 1)
     
     # Client-wise analytics
     client_analytics = []
@@ -1123,10 +1133,8 @@ def sales_analytics(request):
         'total_stock': total_stock,
         'in_stock': in_stock,
         'delivered_stock': delivered_stock,
-        'returned_stock': returned_stock,
         'in_stock_percent': in_stock_percent,
         'delivered_percent': delivered_percent,
-        'returned_percent': returned_percent,
         'client_analytics': client_analytics,
         'monthly_trend': monthly_trend,
         'recent_bills': recent_bills,
