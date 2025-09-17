@@ -63,11 +63,22 @@ def login_view(request):
 
 def admin_dashboard(request):
     total_bottles = Bottle.objects.count()
-    delivered = Bottle.objects.filter(status='delivered').count()
-    returned = Bottle.objects.filter(status='returned').count()
     in_stock = Bottle.objects.filter(status='in_stock').count()
-    pending = delivered  # Bottles delivered but not yet returned
+    delivered = Bottle.objects.filter(status='delivered').count()
+
+    # Pending is same as delivered, since those are bottles with clients
+    pending = delivered  
+
+    # Returned count = number of bottles ever returned via transactions
+    returned = (
+        Transaction.objects.filter(transaction_type='returned')
+        .values_list('bottles', flat=True)
+        .distinct()
+        .count()
+    )
+
     recent_transactions = Transaction.objects.prefetch_related('bottles').order_by('-date')[:5]
+
     return render(request, 'admin_dashboard.html', {
         'total_bottles': total_bottles,
         'delivered': delivered,
@@ -76,6 +87,8 @@ def admin_dashboard(request):
         'pending': pending,
         'recent_transactions': recent_transactions,
     })
+
+
 
 def delivery_dashboard(request):
     delivered = Transaction.objects.filter(delivered_by=request.user, transaction_type='delivered').count()
