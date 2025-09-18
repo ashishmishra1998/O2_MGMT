@@ -31,40 +31,116 @@
         <a href="{% url 'transaction_create' %}?transaction_type=delivered" class="btn btn-primary">Deliver Bottle</a>
         <a href="{% url 'transaction_create' %}?transaction_type=returned" class="btn btn-info">Return Bottle</a>
     </div>
-    <table class="table table-bordered table-striped">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Client</th>
-                <th>Bottles</th>
-                <th>Type</th>
-                <th>Delivered By</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for t in transactions %}
-            <tr>
-                <td>{{ t.date|date:'Y-m-d H:i' }}</td>
-                <td>{{ t.client.name }}</td>
-                <td>
-                    {% with t.bottles.count as bottle_count %}
-                    <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#bottlesModal{{ t.id }}">
-                        Show {{ bottle_count }} Bottle{% if bottle_count != 1 %}s{% endif %}
-                    </button>
-                    {% endwith %}
-                    <!-- Modal -->
-                     {% include 'partials/transaction_bottle_modal.html' with transaction=t %}
-                </td>
-                <td>{{ t.get_transaction_type_display }}</td>
-                <td>{{ t.delivered_by.username }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="6" class="text-center">No transactions found.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<table class="table table-bordered table-striped">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Client</th>
+            <th>Bottles</th>
+            <th>Type</th>
+            <th>Delivered By</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for t in transactions %}
+        <tr>
+            <td>
+            {% if t.custom_date %}
+                {{ t.custom_date|date:"Y-m-d H:i" }}
+            {% else %}
+                {{ t.date|date:"Y-m-d H:i" }}
+            {% endif %}
+            </td>            
+            <td>{{ t.client.name }}</td>
+            <td>
+                {% with t.bottles.count as bottle_count %}
+                <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#bottlesModal{{ t.id }}">
+                    Show {{ bottle_count }} Bottle{% if bottle_count != 1 %}s{% endif %}
+                </button>
+                {% endwith %}
+                {% include 'partials/transaction_bottle_modal.html' with transaction=t %}
+            </td>
+            <td>{{ t.get_transaction_type_display }}</td>
+            <td>{{ t.delivered_by.username }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="6" class="text-center">No transactions found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <div>
+    <strong>Total:</strong> {{ page_obj.paginator.count }} transactions
+  </div>
+  <div>
+    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+  </div>
+</div>
+
+<nav aria-label="Page navigation">
+  <ul class="pagination justify-content-center">
+
+    {# First + Prev #}
+    {% if page_obj.has_previous %}
+      <li class="page-item">
+        <a class="page-link" href="?page=1{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">« First</a>
+      </li>
+      <li class="page-item">
+        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">‹ Prev</a>
+      </li>
+    {% endif %}
+
+    {# Always show first page #}
+    {% if page_obj.number > 3 %}
+      <li class="page-item">
+        <a class="page-link" href="?page=1{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">1</a>
+      </li>
+      {% if page_obj.number > 4 %}
+        <li class="page-item disabled"><span class="page-link">…</span></li>
+      {% endif %}
+    {% endif %}
+
+    {# Pages around current #}
+    {% for num in page_obj.paginator.page_range %}
+      {% if num >= page_obj.number|add:'-2' and num <= page_obj.number|add:'2' %}
+        {% if num == page_obj.number %}
+          <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+        {% else %}
+          <li class="page-item">
+            <a class="page-link" href="?page={{ num }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">{{ num }}</a>
+          </li>
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+
+    {# Always show last page #}
+    {% if page_obj.number < page_obj.paginator.num_pages|add:'-2' %}
+      {% if page_obj.number < page_obj.paginator.num_pages|add:'-3' %}
+        <li class="page-item disabled"><span class="page-link">…</span></li>
+      {% endif %}
+      <li class="page-item">
+        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">{{ page_obj.paginator.num_pages }}</a>
+      </li>
+    {% endif %}
+
+    {# Next + Last #}
+    {% if page_obj.has_next %}
+      <li class="page-item">
+        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">Next ›</a>
+      </li>
+      <li class="page-item">
+        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">Last »</a>
+      </li>
+    {% endif %}
+
+  </ul>
+</nav>
+
+
+
 {% endblock %}
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

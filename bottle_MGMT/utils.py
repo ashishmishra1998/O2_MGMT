@@ -3,7 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from django.db.models import Max
-from .models import BillTransaction
+from .models import BillTransaction, BottlePricing
 from django.utils.timezone import make_aware
 from collections import Counter
 

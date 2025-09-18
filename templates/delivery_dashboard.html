@@ -44,7 +44,13 @@
         <tbody>
             {% for t in recent_transactions %}
             <tr>
-                <td>{{ t.date|date:'Y-m-d H:i' }}</td>
+                <td>
+                {% if t.custom_date %}
+                    {{ t.custom_date|date:"Y-m-d H:i" }}
+                {% else %}
+                    {{ t.date|date:"Y-m-d H:i" }}
+                {% endif %}
+                </td>                
                 <td>{{ t.client.name }}</td>
                 <td>{{ t.bottle.code }}</td>
                 <td>{{ t.get_transaction_type_display }}</td>
