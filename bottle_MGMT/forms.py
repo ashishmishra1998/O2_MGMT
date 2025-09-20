@@ -30,7 +30,7 @@ class AdminProfileForm(forms.ModelForm):
         fields = [
             'owner_gst', 'account_holder', 'account_number', 'ifsc', 'branch',
             'account_type', 'mmid', 'vpa', 'upi_number', 'upi_qr',
-            'contact'
+            'contact', 'hsn_code', 'cum_value',
         ]
 
     def clean_contact(self):

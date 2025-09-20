@@ -30,6 +30,7 @@ from reportlab.lib.utils import ImageReader
 from django.db import transaction as db_transaction
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from django.http import JsonResponse
+from django.core.paginator import Paginator
 
 
 # Ensure admin and delivery boy users exist
@@ -126,15 +127,21 @@ def client_create(request):
         form = ClientForm()
     return render(request, 'client_create.html', {'form': form})
 
+@login_required
 def client_list(request):
     query = request.GET.get('q', '')
     if query:
-        clients = Client.objects.filter(name__icontains=query)
+        clients_qs = Client.objects.filter(name__icontains=query)
     else:
-        clients = Client.objects.all()
+        clients_qs = Client.objects.all()
+
+    # Paginate clients (10 per page, adjust as needed)
+    paginator = Paginator(clients_qs, 10)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
 
     client_stats = []
-    for client in clients:
+    for client in page_obj:  # only iterate over clients in this page
         # Delivered transactions
         delivered_txns = Transaction.objects.filter(client=client, transaction_type='delivered')
         delivered_bottles = sum(t.bottles.count() for t in delivered_txns)
@@ -148,7 +155,7 @@ def client_list(request):
         # Get actual list of pending bottles
         pending_bottles_list = Bottle.objects.filter(
             transaction__client=client,
-            status="delivered"  # still with client
+            status="delivered"
         ).select_related("category")
 
         # Unbilled bottles
@@ -166,11 +173,12 @@ def client_list(request):
         })
 
     return render(request, 'client_list.html', {
-        'clients': clients,
         'query': query,
-        'client_stats': client_stats
+        'client_stats': client_stats,
+        'page_obj': page_obj,
     })
     
+ 
 @login_required
 def get_client_bottles(request):
     client_id = request.GET.get('client_id')
@@ -249,54 +257,80 @@ def transaction_list(request):
     # Filtering
     client_id = request.GET.get('client')
     if client_id:
+        print("Filtering by client:", client_id)  # Debug print
         transactions = transactions.filter(client_id=client_id)
+
     transaction_type = request.GET.get('type')
     if transaction_type:
         transactions = transactions.filter(transaction_type=transaction_type)
+
     transactions = transactions.prefetch_related('bottles')
+
+    # 🔹 Add pagination
+    paginator = Paginator(transactions, 10)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
     return render(request, 'transaction_list.html', {
-        'transactions': transactions,
+        'transactions': page_obj,  # pass paginated data
         'clients': Client.objects.all(),
         'selected_client': client_id,
         'selected_type': transaction_type,
+        'page_obj': page_obj,  # useful for pagination controls
     })
 
+@staff_member_required
 def reports_view(request):
     if not request.user.is_staff:
         return HttpResponseForbidden('You do not have permission to view this page.')
-    from django.db.models import Count
     import json
+    from django.utils import timezone
+    from datetime import timedelta
+
     user = request.user
-    is_admin = user.is_staff
     client_id = request.GET.get('client')
+
     transactions = Transaction.objects.all()
-    clients = Client.objects.all()
     if client_id:
         transactions = transactions.filter(client_id=client_id)
+
+    clients = Client.objects.all()
+
     # Date ranges
-    from django.utils import timezone
     now = timezone.now()
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
     year_ago = now - timedelta(days=365)
-    # Stats
+
+    # Stats function (counts bottles, not transactions)
     def count_stats(qs):
+        delivered = sum(t.bottles.count() for t in qs.filter(transaction_type='delivered'))
+        # Returned = bottles that have moved back to in_stock
+        returned = Bottle.objects.filter(
+            transaction__in=qs,
+            status="in_stock"
+        ).count()
         return {
-            'delivered': qs.filter(transaction_type='delivered').count(),
-            'returned': qs.filter(transaction_type='returned').count(),
+            'delivered': delivered,
+            'returned': returned,
         }
+
     stats = {
         'week': count_stats(transactions.filter(date__gte=week_ago)),
         'month': count_stats(transactions.filter(date__gte=month_ago)),
         'year': count_stats(transactions.filter(date__gte=year_ago)),
         'overall': count_stats(transactions),
     }
-    # Prepare data for Chart.js
+
+    # Chart data
     chart_labels = ['Week', 'Month', 'Year', 'Overall']
-    delivered_data = [stats['week']['delivered'], stats['month']['delivered'], stats['year']['delivered'], stats['overall']['delivered']]
-    returned_data = [stats['week']['returned'], stats['month']['returned'], stats['year']['returned'], stats['overall']['returned']]
+    delivered_data = [stats['week']['delivered'], stats['month']['delivered'],
+                      stats['year']['delivered'], stats['overall']['delivered']]
+    returned_data = [stats['week']['returned'], stats['month']['returned'],
+                     stats['year']['returned'], stats['overall']['returned']]
+
     return render(request, 'reports.html', {
-        'is_admin': is_admin,
+        'is_admin': user.is_staff,
         'clients': clients,
         'selected_client': client_id,
         'chart_labels': json.dumps(chart_labels),
@@ -309,14 +343,15 @@ def reports_view(request):
 def inventory_view(request):
     status = request.GET.get('status', '')
     code_query = request.GET.get('q', '')
-    bottles = Bottle.objects.all().order_by('code')
     category_id = request.GET.get('category', '')
+
+    bottles = Bottle.objects.all().order_by('code')
 
     if status:
         bottles = bottles.filter(status=status)
     if code_query:
         bottles = bottles.filter(code__icontains=code_query)
-    if category_id: 
+    if category_id:
         bottles = bottles.filter(category_id=category_id)
 
     categories = BottleCategory.objects.all()
@@ -324,8 +359,15 @@ def inventory_view(request):
     in_stock = bottles.filter(status='in_stock').count()
     delivered = bottles.filter(status='delivered').count()
     returned = bottles.filter(status='returned').count()
+
+    # 🔹 Add pagination (20 bottles per page, tweak if needed)
+    paginator = Paginator(bottles, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
     return render(request, 'inventory.html', {
-        'bottles': bottles,
+        'bottles': page_obj,          # use paginated queryset
+        'page_obj': page_obj,         # pass for template controls
         'total': total,
         'in_stock': in_stock,
         'delivered': delivered,
@@ -1162,7 +1204,7 @@ def sales_analytics(request):
 
         recent_transactions.append({
             "id": txn.id,
-            "date": txn.date,
+            "date": txn.custom_date or txn.date,
             "client": txn.client,
             "client_name": txn.client.name,
             "type": txn.transaction_type,
