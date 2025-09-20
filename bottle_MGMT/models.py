@@ -36,9 +36,26 @@ class Client(models.Model):
     # NEW: Admin-configurable HSN & C.U.M placeholders
     hsn_code = models.CharField(max_length=20, blank=True, null=True, default="28044090")
     cum_value = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal('7.00'))
+    
+    # Soft delete field
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.role})"
+    
+    def soft_delete(self):
+        """Soft delete the client"""
+        from django.utils import timezone
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save()
+    
+    def restore(self):
+        """Restore the client"""
+        self.is_deleted = False
+        self.deleted_at = None
+        self.save()
 
 class BottleCategory(models.Model):
     name = models.CharField(max_length=50, unique=True)

@@ -127,58 +127,107 @@ def client_create(request):
         form = ClientForm()
     return render(request, 'client_create.html', {'form': form})
 
-@login_required
+@staff_member_required
+def client_edit(request, client_id):
+    client = get_object_or_404(Client, id=client_id, is_deleted=False)
+    if request.method == 'POST':
+        form = ClientForm(request.POST, instance=client)
+        if form.is_valid():
+            form.save()
+            return redirect('client_list')
+    else:
+        form = ClientForm(instance=client)
+    return render(request, 'client_create.html', {'form': form, 'client': client, 'is_edit': True})
+
+@staff_member_required
+def client_delete(request, client_id):
+    client = get_object_or_404(Client, id=client_id, is_deleted=False)
+    if request.method == 'POST':
+        client.soft_delete()
+        return redirect('client_list')
+    return render(request, 'client_delete.html', {'client': client})
+
+@staff_member_required
+def client_restore(request, client_id):
+    client = get_object_or_404(Client, id=client_id, is_deleted=True)
+    if request.method == 'POST':
+        client.restore()
+        return redirect('client_list')
+    return render(request, 'client_restore.html', {'client': client})
+
 def client_list(request):
     query = request.GET.get('q', '')
-    if query:
-        clients_qs = Client.objects.filter(name__icontains=query)
+    show_deleted = request.GET.get('show_deleted', 'false').lower() == 'true'
+    
+    if show_deleted:
+        # Show deleted clients
+        if query:
+            clients = Client.objects.filter(name__icontains=query, is_deleted=True).order_by('name')
+        else:
+            clients = Client.objects.filter(is_deleted=True).order_by('name')
     else:
-        clients_qs = Client.objects.all()
+        # Show active clients (default)
+        if query:
+            clients = Client.objects.filter(name__icontains=query, is_deleted=False).order_by('name')
+        else:
+            clients = Client.objects.filter(is_deleted=False).order_by('name')
 
-    # Paginate clients (10 per page, adjust as needed)
-    paginator = Paginator(clients_qs, 10)
-    page_number = request.GET.get("page")
+    # Add pagination
+    paginator = Paginator(clients, 20)  # 20 clients per page
+    page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
     client_stats = []
-    for client in page_obj:  # only iterate over clients in this page
-        # Delivered transactions
-        delivered_txns = Transaction.objects.filter(client=client, transaction_type='delivered')
-        delivered_bottles = sum(t.bottles.count() for t in delivered_txns)
+    for client in page_obj:  # Use paginated clients
+        if show_deleted:
+            # For deleted clients, don't calculate stats (they're not active)
+            client_stats.append({
+                'client': client,
+                'delivered': 0,
+                'returned': 0,
+                'pending': 0,
+                'pending_bottles_list': [],
+                'pending_bill_bottles': 0,
+            })
+        else:
+            # Delivered transactions
+            delivered_txns = Transaction.objects.filter(client=client, transaction_type='delivered')
+            delivered_bottles = sum(t.bottles.count() for t in delivered_txns)
 
-        # Returned transactions
-        returned_txns = Transaction.objects.filter(client=client, transaction_type='returned')
-        returned_bottles = sum(t.bottles.count() for t in returned_txns)
+            # Returned transactions
+            returned_txns = Transaction.objects.filter(client=client, transaction_type='returned')
+            returned_bottles = sum(t.bottles.count() for t in returned_txns)
 
-        pending_bottles = delivered_bottles - returned_bottles
+            pending_bottles = delivered_bottles - returned_bottles
 
-        # Get actual list of pending bottles
-        pending_bottles_list = Bottle.objects.filter(
-            transaction__client=client,
-            status="delivered"
-        ).select_related("category")
+            # Get actual list of pending bottles
+            pending_bottles_list = Bottle.objects.filter(
+                transaction__client=client,
+                status="delivered"
+            ).select_related("category")
 
-        # Unbilled bottles
-        pending_bill_bottles = sum(
-            t.bottles.count() for t in delivered_txns.filter(billed=False)
-        )
+            # Unbilled bottles
+            pending_bill_bottles = sum(
+                t.bottles.count() for t in delivered_txns.filter(billed=False)
+            )
 
-        client_stats.append({
-            'client': client,
-            'delivered': delivered_bottles,
-            'returned': returned_bottles,
-            'pending': pending_bottles,
-            'pending_bottles_list': pending_bottles_list,
-            'pending_bill_bottles': pending_bill_bottles,
-        })
+            client_stats.append({
+                'client': client,
+                'delivered': delivered_bottles,
+                'returned': returned_bottles,
+                'pending': pending_bottles,
+                'pending_bottles_list': pending_bottles_list,
+                'pending_bill_bottles': pending_bill_bottles,
+            })
 
     return render(request, 'client_list.html', {
+        'clients': page_obj,  # Use paginated clients
+        'page_obj': page_obj,  # Pass for pagination controls
         'query': query,
         'client_stats': client_stats,
-        'page_obj': page_obj,
+        'show_deleted': show_deleted
     })
     
- 
 @login_required
 def get_client_bottles(request):
     client_id = request.GET.get('client_id')
