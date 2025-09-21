@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.http import HttpResponse
 from .forms import ClientForm, AddBottlesForm
 from .models import Client
-from .forms import TransactionForm, AdminProfileForm, BottlePricingForm, ClientForm, AddBottlesForm, BottleCategoryForm
+from .forms import TransactionForm, AdminProfileForm, BottlePricingForm, ClientForm, AddBottlesForm, BottleCategoryForm, ManualBillForm
 from .models import Transaction, Bottle, Bill, BillTransaction, TransactionPhoto, BottleCategory
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
@@ -23,12 +23,12 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from io import BytesIO
 from django.db.models import Q
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from .utils import compute_totals, get_next_challan_number, compute_totals_from_subtotal, build_transaction_rows, number_to_words
 from reportlab.lib import colors
 from reportlab.lib.utils import ImageReader
 from django.db import transaction as db_transaction
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from django.http import JsonResponse
 from django.core.paginator import Paginator
 
@@ -581,6 +581,7 @@ def create_custom_bill(request, client_id):
         return redirect('custom_billing', client_id=client_id)
 
     # Build itemized rows and compute subtotal correctly from per-row rates
+    admin_client = Client.objects.filter(role='admin').first()
     transaction_rows, subtotal = build_transaction_rows(selected_transactions, admin_client)
 
 
@@ -659,13 +660,36 @@ def generate_bill(request, client_id, bill_id=None):
     if bill_id:
         # Render existing bill
         bill = get_object_or_404(Bill, id=bill_id, client=client)
-        bts = BillTransaction.objects.filter(bill=bill).select_related('transaction').order_by('transaction__date', 'created_at')
-        txns = [bt.transaction for bt in bts]
+        
+        # Handle manual bills differently
+        if bill.manual_bill:
+            # Use stored manual bill data
+            gas_type = bill.manual_gas_type or 'Manual Entry'
+            challan_no = bill.manual_challan_number or 1
+            
+            # For manual bills, create a mock transaction row from bill data
+            transaction_rows = [{
+                'date': bill.bill_date.date(),
+                'gas': gas_type,
+                'challan_no': challan_no,
+                'hsn': admin_client.hsn_code if admin_client else '28044090',
+                'qty': bill.delivered_bottles,
+                'cum': admin_client.cum_value if admin_client else Decimal('7.00'),
+                'total_qty': bill.delivered_bottles,
+                'rate': bill.price_per_bottle,
+                'amount': bill.subtotal_amount,
+                'txn': None
+            }]
+            subtotal = bill.subtotal_amount
+        else:
+            # Regular bills with transactions
+            bts = BillTransaction.objects.filter(bill=bill).select_related('transaction').order_by('transaction__date', 'created_at')
+            txns = [bt.transaction for bt in bts]
 
-        transaction_rows, subtotal = build_transaction_rows(txns, admin_client)
-        for row in transaction_rows:
-            bt = next(bt for bt in bts if bt.transaction_id == row['txn'].id)
-            row['challan_no'] = bt.challan_number
+            transaction_rows, subtotal = build_transaction_rows(txns, admin_client)
+            for row in transaction_rows:
+                bt = next(bt for bt in bts if bt.transaction_id == row['txn'].id)
+                row['challan_no'] = bt.challan_number
         # Compute totals based on actual subtotal (if bill already has fields, keep them consistent)
         # Use bill fields if present; otherwise compute from subtotal
         if getattr(bill, 'subtotal_amount', None):
@@ -1020,6 +1044,28 @@ def generate_pdf_bill(request, context):
     # Debug: Always add amount in words for testing
     elements.append(Paragraph(f"<b>Amount in Words:</b> {amount_in_words.title() if amount_in_words else 'NOT_SET'}", styles["LeftSmall"]))
     elements.append(Spacer(1, 12))
+    
+    # # --- QR Code (if available) ---
+    # upi_qr = getattr(admin, "upi_qr", None) or (admin.get("upi_qr") if isinstance(admin, dict) else None)
+    # if upi_qr:
+    #     try:
+    #         # Get the full path to the QR code image
+    #         if hasattr(upi_qr, 'path'):
+    #             qr_path = upi_qr.path
+    #         else:
+    #             # If it's a URL, we need to handle it differently
+    #             qr_path = str(upi_qr)
+            
+    #         # Create image element with proper spacing
+    #         qr_image = Image(qr_path, width=120, height=120)
+    #         elements.append(Spacer(1, 12))  # White space on top
+    #         elements.append(qr_image)
+    #         elements.append(Paragraph("Scan & Pay", styles["LeftSmall"]))
+    #         elements.append(Spacer(1, 12))  # White space on bottom
+    #     except Exception as e:
+    #         # If QR code fails to load, just skip it
+    #         print(f"QR code loading failed: {e}")
+    #         pass
 
     # --- Payment Details (Bank left, UPI right) ---
     bank_lines = []
@@ -1038,6 +1084,7 @@ def generate_pdf_bill(request, context):
     # UPI details
     upi_vpa = getattr(admin, "vpa", None) or (admin.get("vpa") if isinstance(admin, dict) else None)
     upi_no = getattr(admin, "upi_number", None) or (admin.get("upi_number") if isinstance(admin, dict) else None)
+    
     if upi_vpa or upi_no:
         elements.append(Spacer(1, 6))
         elements.append(Paragraph("<b>UPI Payment</b>", styles["LeftSmall"]))
@@ -1046,6 +1093,22 @@ def generate_pdf_bill(request, context):
         if upi_no:
             elements.append(Paragraph(f"UPI No: {upi_no}", styles["LeftSmall"]))
 
+    # --- Terms and Conditions ---
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph("<b>Terms and Conditions</b>", styles["LeftSmall"]))
+    elements.append(Spacer(1, 6))
+    
+    terms_conditions = [
+        "• Received the above filled cylinders complete with valves and caps.",
+        "• We agree with the terms and conditions of the agreement, including the rental charges.",
+        "• Our responsibility ceases as soon as goods have left our warehouse.",
+        "• Payment is requested by account payee cheque/DD only.",
+        "• Interest at @24% will be charged if payment is not made within 30 days."
+    ]
+    
+    for term in terms_conditions:
+        elements.append(Paragraph(term, styles["LeftSmall"]))
+    
     elements.append(Spacer(1, 24))
     elements.append(Paragraph(f"For, {company_name}", styles["LeftSmall"]))
     elements.append(Spacer(1, 36))
@@ -1398,3 +1461,117 @@ def category_edit(request, category_id):
         form = BottleCategoryForm(instance=category)
     
     return render(request, 'category_form.html', {'form': form, 'category': category, 'edit': True})
+
+@staff_member_required
+def manual_bill_create(request):
+    """Create a manual bill with all details entered manually"""
+    if request.method == 'POST':
+        form = ManualBillForm(request.POST)
+        if form.is_valid():
+            try:
+                # Get form data
+                client = form.cleaned_data['client']
+                bill_date = form.cleaned_data['bill_date']
+                transaction_date = form.cleaned_data['transaction_date']
+                gas_category = form.cleaned_data['gas_type']  # This is now a BottleCategory object
+                challan_number = form.cleaned_data['challan_number']
+                hsn_code = form.cleaned_data['hsn_code']
+                quantity = form.cleaned_data['quantity']
+                cum_value = form.cleaned_data['cum_value']
+                total_quantity = form.cleaned_data['total_quantity']
+                rate_per_bottle = form.cleaned_data['rate_per_bottle']
+                
+                # Financial data
+                subtotal_amount = form.cleaned_data['subtotal_amount']
+                discount_percentage = form.cleaned_data['discount_percentage']
+                discount_amount = form.cleaned_data['discount_amount']
+                taxable_amount = form.cleaned_data['taxable_amount']
+                gst_percentage = form.cleaned_data['gst_percentage']
+                gst_amount = form.cleaned_data['gst_amount']
+                final_amount = form.cleaned_data['final_amount']
+                description = form.cleaned_data['description']
+                
+                # Create the bill
+                with db_transaction.atomic():
+                    bill = Bill.objects.create(
+                        client=client,
+                        bill_date=bill_date,
+                        delivered_bottles=quantity,
+                        returned_bottles=0,
+                        pending_bottles=quantity,
+                        price_per_bottle=rate_per_bottle,
+                        total_amount=subtotal_amount,
+                        subtotal_amount=subtotal_amount,
+                        discount_percentage=discount_percentage,
+                        discount_amount=discount_amount,
+                        taxable_amount=taxable_amount,
+                        gst_percentage=gst_percentage,
+                        gst_amount=gst_amount,
+                        final_amount=final_amount,
+                        generated_by=request.user,
+                        bill_type='manual',
+                        description=description or f'Manual bill for {gas_category.name} - {quantity} bottles',
+                        manual_bill=True,
+                        manual_gas_type=gas_category.name,
+                        manual_challan_number=challan_number
+                    )
+                
+                # Create a mock transaction row for display purposes
+                transaction_row = {
+                    'date': transaction_date,
+                    'gas': gas_category.name,  # Use the category name
+                    'challan_no': challan_number,
+                    'hsn': hsn_code,
+                    'qty': quantity,
+                    'cum': cum_value,
+                    'total_qty': total_quantity,
+                    'rate': rate_per_bottle,
+                    'amount': subtotal_amount,
+                    'txn': None  # No actual transaction for manual bills
+                }
+                
+                # Prepare context for bill display
+                admin_client = Client.objects.filter(role='admin').first()
+                cgst_amount = (gst_amount / Decimal('2')).quantize(Decimal('0.01')) if gst_amount else Decimal('0.00')
+                sgst_amount = cgst_amount
+                cgst_percentage = (gst_percentage / Decimal('2')).quantize(Decimal('0.01')) if gst_percentage else Decimal('0.00')
+                sgst_percentage = cgst_percentage
+                
+                context = {
+                    'client': client,
+                    'bill': bill,
+                    'transaction_rows': [transaction_row],
+                    'cgst_amount': cgst_amount,
+                    'sgst_amount': sgst_amount,
+                    'cgst_percentage': cgst_percentage,
+                    'sgst_percentage': sgst_percentage,
+                    'admin_client': admin_client,
+                    'amount_in_words': number_to_words(bill.final_amount),
+                }
+                
+                # Redirect to bill preview page
+                return redirect('generate_bill', client_id=client.id, bill_id=bill.id)
+                
+            except Exception as e:
+                messages.error(request, f'Error creating manual bill: {str(e)}')
+                return render(request, 'manual_bill.html', {'form': form})
+    else:
+        form = ManualBillForm()
+    
+    return render(request, 'manual_bill.html', {'form': form})
+
+@staff_member_required
+def manual_bills_list(request):
+    """List all manually created bills"""
+    # Get all manual bills
+    manual_bills = Bill.objects.filter(manual_bill=True).select_related('client', 'generated_by').order_by('-bill_date')
+    
+    # Add pagination
+    paginator = Paginator(manual_bills, 20)  # 20 bills per page
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    return render(request, 'manual_bills_list.html', {
+        'manual_bills': page_obj,
+        'page_obj': page_obj,
+    })

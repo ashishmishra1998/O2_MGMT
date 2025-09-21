@@ -203,48 +203,78 @@ def number_to_words(number):
     tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
     
     def convert_hundreds(n):
+        """Convert numbers 0-999 to words"""
+        if n == 0:
+            return ""
+        
         result = ""
         
         # Handle hundreds
         if n >= 100:
-            result += ones[n // 100] + " hundred"
+            hundreds_digit = n // 100
+            if hundreds_digit <= 9:  # Safety check
+                result += ones[hundreds_digit] + " hundred"
+            else:
+                # For numbers > 999, just return the number as string
+                return str(n)
             n %= 100
             if n > 0:
                 result += " and "
         
         # Handle tens and ones
         if n >= 20:
-            result += tens[n // 10]
-            if n % 10 > 0:
-                result += " " + ones[n % 10]
+            tens_digit = n // 10
+            if tens_digit <= 9:  # Safety check
+                result += tens[tens_digit]
+                if n % 10 > 0:
+                    result += " " + ones[n % 10]
+            else:
+                result += str(n)
         elif n >= 10:
-            result += teens[n - 10]
+            teens_index = n - 10
+            if teens_index <= 9:  # Safety check
+                result += teens[teens_index]
+            else:
+                result += str(n)
         elif n > 0:
-            result += ones[n]
+            if n <= 9:  # Safety check
+                result += ones[n]
+            else:
+                result += str(n)
         
         return result
     
     def convert_lakhs(n):
+        """Convert numbers 0-9999999 to words"""
         if n >= 100000:
             lakhs = n // 100000
             remainder = n % 100000
             result = convert_hundreds(lakhs) + " lakh"
             if remainder > 0:
-                result += " " + convert_hundreds(remainder)
+                remainder_words = convert_hundreds(remainder)
+                if remainder_words:
+                    result += " " + remainder_words
             return result
         else:
             return convert_hundreds(n)
     
     def convert_crores(n):
+        """Convert numbers 0-999999999 to words"""
         if n >= 10000000:
             crores = n // 10000000
             remainder = n % 10000000
             result = convert_hundreds(crores) + " crore"
             if remainder > 0:
-                result += " " + convert_lakhs(remainder)
+                remainder_words = convert_lakhs(remainder)
+                if remainder_words:
+                    result += " " + remainder_words
             return result
         else:
             return convert_lakhs(n)
+    
+    # Handle very large numbers (beyond crores)
+    if num >= 1000000000:  # 100 crores or more
+        return f"{num:,} rupees"  # Just show the number with commas
     
     # Convert the number
     words = convert_crores(num)

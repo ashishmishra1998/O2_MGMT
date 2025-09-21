@@ -124,6 +124,7 @@ class Bill(models.Model):
     BILL_TYPE_CHOICES = [
         ('auto', 'Automated'),
         ('custom', 'Custom'),
+        ('manual', 'Manual'),
     ]
     client = models.ForeignKey(Client, on_delete=models.CASCADE)
     bill_date = models.DateTimeField(auto_now_add=True)
@@ -147,6 +148,9 @@ class Bill(models.Model):
     paid_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='bills_paid')
     bill_type = models.CharField(max_length=10, choices=BILL_TYPE_CHOICES, default='auto')
     description = models.TextField(blank=True, null=True)  # For custom bill descriptions
+    manual_bill = models.BooleanField(default=False)  # Flag to identify manual bills
+    manual_gas_type = models.CharField(max_length=100, blank=True, null=True)  # Gas type for manual bills
+    manual_challan_number = models.IntegerField(blank=True, null=True)  # Challan number for manual bills
 
     def __str__(self):
         return f"Bill for {self.client.name} - {self.bill_date.strftime('%Y-%m-%d')}"

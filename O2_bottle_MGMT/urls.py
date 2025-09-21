@@ -51,6 +51,8 @@ urlpatterns = [
     path('categories/', views.category_list, name='category_list'),
     path('categories/add/', views.category_create, name='category_create'),
     path('categories/<int:category_id>/edit/', views.category_edit, name='category_edit'),
+    path('manual-bill/', views.manual_bill_create, name='manual_bill_create'),
+    path('manual-bills/', views.manual_bills_list, name='manual_bills_list'),
 ]
 
 # Serve media files in development

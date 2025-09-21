@@ -51,16 +51,19 @@
                     </ul>
                 </li>
 
-                <!-- Reports Dropdown -->
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name in 'sales_analytics reports' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">
-                        Reports
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{% url 'sales_analytics' %}">Sales Analytics</a></li>
-                        <li><a class="dropdown-item" href="{% url 'reports' %}">Reports</a></li>
-                    </ul>
-                </li>
+                 <!-- Reports Dropdown -->
+                 <li class="nav-item dropdown">
+                     <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name in 'sales_analytics reports manual_bill_create manual_bills_list' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">
+                         Reports
+                     </a>
+                     <ul class="dropdown-menu">
+                         <li><a class="dropdown-item" href="{% url 'sales_analytics' %}">Sales Analytics</a></li>
+                         <li><a class="dropdown-item" href="{% url 'reports' %}">Reports</a></li>
+                         <li><hr class="dropdown-divider"></li>
+                         <li><a class="dropdown-item" href="{% url 'manual_bill_create' %}">Create Manual Bill</a></li>
+                         <li><a class="dropdown-item" href="{% url 'manual_bills_list' %}">Manual Bills</a></li>
+                     </ul>
+                 </li>
                 {% endif %}
 
                 <!-- Profile Dropdown -->
