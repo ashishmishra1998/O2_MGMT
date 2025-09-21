@@ -202,9 +202,9 @@ def client_list(request):
 
             # Get actual list of pending bottles
             pending_bottles_list = Bottle.objects.filter(
-                transaction__client=client,
-                status="delivered"
-            ).select_related("category")
+                status="delivered",
+                transaction__client=client
+            ).distinct().select_related("category")
 
             # Unbilled bottles
             pending_bill_bottles = sum(
@@ -496,15 +496,17 @@ def pricing_view(request):
 def custom_billing_view(request, client_id):
     """View client transactions for custom billing"""
     client = get_object_or_404(Client, id=client_id)
-    
+
     # Get date filters
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
     transaction_type = request.GET.get('transaction_type', '')
-    
-    # Get all transactions for this client
-    transactions = Transaction.objects.filter(client=client, transaction_type='delivered').order_by('-date')
-    
+
+    # Get all transactions for this client (delivered only by default)
+    transactions = Transaction.objects.filter(
+        client=client, transaction_type='delivered'
+    ).order_by('-date')
+
     # Apply filters
     if start_date:
         try:
@@ -512,28 +514,27 @@ def custom_billing_view(request, client_id):
             transactions = transactions.filter(date__date__gte=start_date)
         except ValueError:
             pass
-    
+
     if end_date:
         try:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
             transactions = transactions.filter(date__date__lte=end_date)
         except ValueError:
             pass
-    
+
     if transaction_type:
         transactions = transactions.filter(transaction_type=transaction_type)
-    
+
     # Group transactions by date
     transactions_by_date = {}
     for transaction in transactions:
         date_key = transaction.date.strftime('%Y-%m-%d')
-        if date_key not in transactions_by_date:
-            transactions_by_date[date_key] = []
-        transactions_by_date[date_key].append(transaction)
-    
-    # Get pricing
-    price = BottlePricing.get_solo().price
-    
+        transactions_by_date.setdefault(date_key, []).append(transaction)
+
+    # Get category-wise pricing
+    from .models import BottleCategory
+    categories = BottleCategory.objects.all().values("name", "price")
+
     # Get already custom billed transactions
     custom_billed_transactions = set()
     custom_bills = Bill.objects.filter(client=client, bill_type='custom')
@@ -541,17 +542,17 @@ def custom_billing_view(request, client_id):
         custom_billed_transactions.update(
             bill.bill_transactions.values_list('transaction_id', flat=True)
         )
-    
+
     context = {
         'client': client,
         'transactions_by_date': transactions_by_date,
-        'price': price,
+        'categories': categories,
         'custom_billed_transactions': custom_billed_transactions,
         'start_date': start_date,
         'end_date': end_date,
         'transaction_type': transaction_type,
     }
-    
+
     return render(request, 'custom_billing.html', context)
 
 @staff_member_required
@@ -582,6 +583,7 @@ def create_custom_bill(request, client_id):
 
     # Build itemized rows and compute subtotal correctly from per-row rates
     admin_client = Client.objects.filter(role='admin').first()
+
     transaction_rows, subtotal = build_transaction_rows(selected_transactions, admin_client)
 
 
@@ -817,6 +819,8 @@ def generate_bill(request, client_id, bill_id=None):
     if request.GET.get('format') == 'pdf':
         return generate_pdf_bill(request, context)
     return render(request, 'generate_bill.html', context)
+
+
 # Helper used above
 def default_rate_for_transaction(txn: Transaction):
     """
