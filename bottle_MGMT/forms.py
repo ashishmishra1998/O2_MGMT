@@ -28,7 +28,7 @@ class AdminProfileForm(forms.ModelForm):
     class Meta:
         model = Client
         fields = [
-            'owner_gst', 'account_holder', 'account_number', 'ifsc', 'branch',
+            'owner_gst', 'account_holder','license_number', 'account_number', 'ifsc', 'branch',
             'account_type', 'mmid', 'vpa', 'upi_number', 'upi_qr',
             'contact', 'hsn_code', 'cum_value',
         ]

@@ -24,7 +24,7 @@ from io import BytesIO
 from django.db.models import Q
 from datetime import datetime
 from decimal import Decimal
-from .utils import compute_totals, get_next_challan_number, compute_totals_from_subtotal, build_transaction_rows
+from .utils import compute_totals, get_next_challan_number, compute_totals_from_subtotal, build_transaction_rows, number_to_words
 from reportlab.lib import colors
 from reportlab.lib.utils import ImageReader
 from django.db import transaction as db_transaction
@@ -644,6 +644,7 @@ def create_custom_bill(request, client_id):
         'cgst_percentage': cgst_percentage,
         'sgst_percentage': sgst_percentage,
         'admin_client': Client.objects.filter(role='admin').first(),
+        'amount_in_words': number_to_words(bill.final_amount),
     }
     if request.GET.get('format') == 'pdf':
         return generate_pdf_bill(request, context)
@@ -697,6 +698,7 @@ def generate_bill(request, client_id, bill_id=None):
             'cgst_percentage': cgst_percentage,
             'sgst_percentage': sgst_percentage,
             'admin_client': admin_client,
+            'amount_in_words': number_to_words(bill.final_amount),
         }
         if request.GET.get('format') == 'pdf':
             return generate_pdf_bill(request, context)
@@ -785,6 +787,7 @@ def generate_bill(request, client_id, bill_id=None):
         'cgst_percentage': cgst_percentage,
         'sgst_percentage': sgst_percentage,
         'admin_client': admin_client,
+        'amount_in_words': number_to_words(bill.final_amount),
     }
 
     if request.GET.get('format') == 'pdf':
@@ -873,6 +876,10 @@ def generate_pdf_bill(request, context):
     elements.append(Paragraph(contact_line, styles["CompanyHeader"]))
     if company_gst:
         elements.append(Paragraph(f"GST No: {company_gst}", styles["CompanyHeader"]))
+    # Add license number if available
+    admin_license = getattr(admin, "license_number", None) or (admin.get("license_number") if isinstance(admin, dict) else None) or ""
+    # Debug: Always add license number for testing
+    elements.append(Paragraph(f"License No: {admin_license or 'NOT_SET'}", styles["CompanyHeader"]))
     elements.append(Spacer(1, 12))
 
     # --- Invoice title & bill metadata (center/right) ---
@@ -1006,6 +1013,12 @@ def generate_pdf_bill(request, context):
     table_style.add("BACKGROUND", (0, last_row_idx), (-1, last_row_idx), colors.HexColor("#e6f3ea"))
     table.setStyle(table_style)
     elements.append(table)
+    elements.append(Spacer(1, 12))
+    
+    # --- Amount in Words ---
+    amount_in_words = context.get("amount_in_words", "")
+    # Debug: Always add amount in words for testing
+    elements.append(Paragraph(f"<b>Amount in Words:</b> {amount_in_words.title() if amount_in_words else 'NOT_SET'}", styles["LeftSmall"]))
     elements.append(Spacer(1, 12))
 
     # --- Payment Details (Bank left, UPI right) ---

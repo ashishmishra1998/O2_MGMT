@@ -183,3 +183,71 @@ def build_transaction_rows(transactions, admin_client):
             })
 
     return rows, subtotal
+
+
+def number_to_words(number):
+    """
+    Convert a number to words in Indian format.
+    Example: 415 -> "four hundred and fifteen rupees"
+    """
+    if number == 0:
+        return "zero rupees"
+    
+    # Convert to integer (remove decimal part)
+    num = int(number)
+    
+    # Define word mappings
+    ones = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+    teens = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", 
+             "seventeen", "eighteen", "nineteen"]
+    tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+    
+    def convert_hundreds(n):
+        result = ""
+        
+        # Handle hundreds
+        if n >= 100:
+            result += ones[n // 100] + " hundred"
+            n %= 100
+            if n > 0:
+                result += " and "
+        
+        # Handle tens and ones
+        if n >= 20:
+            result += tens[n // 10]
+            if n % 10 > 0:
+                result += " " + ones[n % 10]
+        elif n >= 10:
+            result += teens[n - 10]
+        elif n > 0:
+            result += ones[n]
+        
+        return result
+    
+    def convert_lakhs(n):
+        if n >= 100000:
+            lakhs = n // 100000
+            remainder = n % 100000
+            result = convert_hundreds(lakhs) + " lakh"
+            if remainder > 0:
+                result += " " + convert_hundreds(remainder)
+            return result
+        else:
+            return convert_hundreds(n)
+    
+    def convert_crores(n):
+        if n >= 10000000:
+            crores = n // 10000000
+            remainder = n % 10000000
+            result = convert_hundreds(crores) + " crore"
+            if remainder > 0:
+                result += " " + convert_lakhs(remainder)
+            return result
+        else:
+            return convert_lakhs(n)
+    
+    # Convert the number
+    words = convert_crores(num)
+    
+    # Add "rupees" at the end
+    return words + " rupees"

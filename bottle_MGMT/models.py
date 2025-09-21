@@ -21,6 +21,7 @@ class Client(models.Model):
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='customer')
     # Admin profile fields
     owner_gst = models.CharField(max_length=20, blank=True, null=True)
+    license_number = models.CharField(max_length=50, blank=True, null=True)
     bank_account = models.CharField(max_length=50, blank=True, null=True)
     card = models.CharField(max_length=50, blank=True, null=True)
     account_holder = models.CharField(max_length=100, blank=True, null=True)
