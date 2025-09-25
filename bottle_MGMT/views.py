@@ -33,6 +33,76 @@ from django.http import JsonResponse
 from django.core.paginator import Paginator
 
 
+@staff_member_required
+def bottle_status(request):
+    """Simple page to show current bottle ownership and allow bottle lookup.
+
+    - Search by bottle code (`q`) shows which client currently holds it (only if delivered).
+    - Summary table of clients -> number of bottles currently with them.
+    """
+    query_code = request.GET.get('q', '').strip()
+
+    # Lookup result for a specific bottle code
+    lookup = None
+    if query_code:
+        bottle = Bottle.objects.filter(code__iexact=query_code).first()
+        if bottle:
+            current_status = bottle.status
+            current_client = None
+            if current_status == 'delivered':
+                # Find latest delivered transaction for this bottle to identify current client
+                last_delivered_txn = (
+                    Transaction.objects.filter(bottles=bottle, transaction_type='delivered')
+                    .order_by('-date')
+                    .first()
+                )
+                current_client = last_delivered_txn.client if last_delivered_txn else None
+            lookup = {
+                'exists': True,
+                'bottle': bottle,
+                'status': current_status,
+                'client': current_client,
+            }
+        else:
+            lookup = {
+                'exists': False,
+                'code': query_code,
+            }
+
+    # Build summary: which clients currently hold how many bottles
+    # Strategy: iterate bottles with status='delivered' and map to latest delivered txn's client
+    delivered_bottles = Bottle.objects.filter(status='delivered').order_by('code')
+    client_to_bottles = {}
+    for b in delivered_bottles:
+        last_delivered_txn = (
+            Transaction.objects.filter(bottles=b, transaction_type='delivered')
+            .order_by('-date')
+            .first()
+        )
+        if last_delivered_txn:
+            c = last_delivered_txn.client
+            if c not in client_to_bottles:
+                client_to_bottles[c] = []
+            client_to_bottles[c].append(b)
+
+    # Convert to a list of rows for the template (sorted by client name)
+    client_rows = []
+    for client_obj, bottles_list in client_to_bottles.items():
+        client_rows.append({
+            'client': client_obj,
+            'count': len(bottles_list),
+            'bottles': bottles_list,
+        })
+    client_rows.sort(key=lambda r: r['client'].name.lower())
+
+    return render(request, 'bottle_status.html', {
+        'query_code': query_code,
+        'lookup': lookup,
+        'client_rows': client_rows,
+        'total_delivered_bottles': delivered_bottles.count(),
+    })
+
+
 # Ensure admin and delivery boy users exist
 ADMIN_USERNAME = 'admin'
 ADMIN_PASSWORD = 'Admin@123'

@@ -42,12 +42,14 @@
                 {% if request.user.is_staff %}
                 <!-- Bottles Dropdown -->
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name in 'inventory category_list' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">
+                    <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name in 'inventory category_list bottle_status' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">
                         Bottles
                     </a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item" href="{% url 'inventory' %}">Inventory</a></li>
                         <li><a class="dropdown-item" href="{% url 'category_list' %}">Categories</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'bottle_status' %}">Bottle Status</a></li>
                     </ul>
                 </li>
 
