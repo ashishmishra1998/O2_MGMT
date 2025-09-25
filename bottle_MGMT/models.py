@@ -109,6 +109,7 @@ class Transaction(models.Model):
     delivered_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPE)
     billed = models.BooleanField(default=False)  # Track if this transaction has been billed
+    challan_number = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.bottle} - {self.transaction_type} - {self.client}"

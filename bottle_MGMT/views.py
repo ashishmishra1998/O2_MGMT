@@ -688,11 +688,20 @@ def create_custom_bill(request, client_id):
         next_challan = get_next_challan_number()
         bt_objs = []
         for txn in selected_transactions:
-            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=next_challan))
+            challan_no = txn.challan_number if txn.challan_number else next_challan
+
+            # if challan not already set, persist it to the transaction
+            if not txn.challan_number:
+                txn.challan_number = challan_no
+                txn.save(update_fields=['challan_number'])
+                next_challan += 1
+
+            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=challan_no))
+
+            # also push challan number into transaction_rows for display
             for row in transaction_rows:
                 if row['txn'] == txn:
-                    row['challan_no'] = next_challan
-            next_challan += 1
+                    row['challan_no'] = challan_no
         BillTransaction.objects.bulk_create(bt_objs)
 
         # mark selected txns billed
@@ -854,11 +863,18 @@ def generate_bill(request, client_id, bill_id=None):
         next_challan = get_next_challan_number()
         bt_objs = []
         for txn in delivered_txns:
-            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=next_challan))
+            challan_no = txn.challan_number if txn.challan_number else next_challan
+
+            if not txn.challan_number:
+                txn.challan_number = challan_no
+                txn.save(update_fields=['challan_number'])
+                next_challan += 1
+
+            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=challan_no))
+
             for row in transaction_rows:
                 if row['txn'] == txn:
-                    row['challan_no'] = next_challan
-            next_challan += 1
+                    row['challan_no'] = challan_no
         BillTransaction.objects.bulk_create(bt_objs)
 
         # mark as billed (exclude custom-linked)

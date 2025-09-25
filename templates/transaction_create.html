@@ -19,15 +19,24 @@
         </div>
         {% endif %}
         <input type="hidden" name="transaction_type" value="{{ transaction_type }}">
+        
         <div class="mb-3">
             <label class="form-label">Transaction Type</label>
             <input type="text" class="form-control" value="{{ transaction_type|title }}" readonly>
         </div>
+
+        <div class="mb-3">
+            <label for="id_challan_number" class="form-label">Challan Number</label>
+            {{ form.challan_number|add_class:'form-control' }}
+            {{ form.challan_number.errors }}
+        </div>
+
         <div class="mb-3">
             <label for="id_client" class="form-label">Client</label>
             {{ form.client|add_class:'form-select' }}
             {{ form.client.errors }}
         </div>
+
         <div class="mb-3">
             <label for="id_bottle" class="form-label" multiple=multiple>Bottles</label>
             {{ form.bottles|add_class:'form-select select2-multiple' }}
@@ -38,17 +47,19 @@
                 </div> Loading bottles...
             </div>
         </div>
+
         <div class="mb-3">
             <label for="id_custom_date" class="form-label">Transaction Date & Time (Optional)</label>
             {{ form.custom_date|add_class:'form-control' }}
             <div class="form-text">{{ form.custom_date.help_text }}</div>
             {{ form.custom_date.errors }}
         </div>
-        <div class="mb-3">
+
         <div class="mb-3">
             <label for="photos" class="form-label">Upload Photos</label>
             <input type="file" name="photos" id="photos" class="form-control" multiple>
         </div>
+
         <button type="submit" id="submit-btn" class="btn btn-success" {% if not form.fields.bottles.queryset.exists %}disabled{% endif %}>Submit</button>
         <a href="{% url 'transaction_create' %}" class="btn btn-secondary">Back to Type Selection</a>
         <a href="{% url 'transaction_list' %}" class="btn btn-secondary">Back to List</a>
@@ -99,7 +110,6 @@
                     $loader.hide();
                     $bottleSelect.prop('disabled', false);
     
-                    // Enable submit only if bottles available
                     if ($bottleSelect.find('option').length > 0) {
                         $submitBtn.prop('disabled', false);
                     } else {
@@ -116,8 +126,5 @@
             }
         });
     });
-    
 </script>
-    
-    
 {% endblock %}
