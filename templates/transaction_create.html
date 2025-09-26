@@ -54,7 +54,12 @@
             <div class="form-text">{{ form.custom_date.help_text }}</div>
             {{ form.custom_date.errors }}
         </div>
-
+        <div class="mb-3">
+            <label for="id_challan_number" class="form-label">Challan Number</label>
+            {{ form.challan_number|add_class:'form-control' }}
+            {{ form.challan_number.errors }}
+        </div>
+        <div class="mb-3">
         <div class="mb-3">
             <label for="photos" class="form-label">Upload Photos</label>
             <input type="file" name="photos" id="photos" class="form-control" multiple>

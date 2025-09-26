@@ -15,7 +15,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.http import HttpResponseForbidden
 from .models import BottlePricing
-from .forms import BottlePricingForm
+from .forms import BottlePricingForm, TransactionEditForm
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
@@ -397,7 +397,23 @@ def transaction_list(request):
         'selected_type': transaction_type,
         'page_obj': page_obj,  # useful for pagination controls
     })
-
+@login_required
+def transaction_edit(request, pk):
+    transaction = get_object_or_404(Transaction, pk=pk)
+    
+    if request.method == 'POST':
+        form = TransactionEditForm(request.POST, instance=transaction)
+        if form.is_valid():
+            form.save()
+            return redirect('transaction_list')
+    else:
+        form = TransactionEditForm(instance=transaction)
+    
+    return render(request, 'transaction_edit.html', {
+        'form': form,
+        'transaction': transaction
+    })
+    
 @staff_member_required
 def reports_view(request):
     if not request.user.is_staff:
@@ -770,7 +786,8 @@ def generate_bill(request, client_id, bill_id=None):
             transaction_rows, subtotal = build_transaction_rows(txns, admin_client)
             for row in transaction_rows:
                 bt = next(bt for bt in bts if bt.transaction_id == row['txn'].id)
-                row['challan_no'] = bt.challan_number
+                # Use transaction's challan_number if available, otherwise use BillTransaction's challan_number
+                row['challan_no'] = row['txn'].challan_number if row['txn'].challan_number else bt.challan_number
         # Compute totals based on actual subtotal (if bill already has fields, keep them consistent)
         # Use bill fields if present; otherwise compute from subtotal
         if getattr(bill, 'subtotal_amount', None):

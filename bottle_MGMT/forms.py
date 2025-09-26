@@ -71,6 +71,11 @@ class TransactionForm(forms.ModelForm):
         else:
             self.fields['bottles'].queryset = Bottle.objects.all()
 
+class TransactionEditForm(forms.ModelForm):
+    class Meta:
+        model = Transaction
+        fields = ['challan_number']
+
 
 class BottlePricingForm(forms.ModelForm):
     class Meta:

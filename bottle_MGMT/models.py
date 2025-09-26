@@ -108,6 +108,7 @@ class Transaction(models.Model):
     custom_date = models.DateTimeField(null=True, blank=True, help_text="Optional custom date for the transaction. If not provided, current date/time will be used.")
     delivered_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPE)
+    challan_number = models.IntegerField(null=True, blank=True, help_text="Challan number for this transaction")
     billed = models.BooleanField(default=False)  # Track if this transaction has been billed
     challan_number = models.IntegerField(null=True, blank=True)
 

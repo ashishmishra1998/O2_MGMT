@@ -31,6 +31,7 @@ urlpatterns = [
     path('clients/<int:client_id>/restore/', views.client_restore, name='client_restore'),
     path('transactions/', views.transaction_list, name='transaction_list'),
     path('transactions/create/', views.transaction_create, name='transaction_create'),
+    path('transactions/<int:pk>/edit/', views.transaction_edit, name='transaction_edit'),
     path('ajax/get-client-bottles/', views.get_client_bottles, name='get_client_bottles'),
     path('reports/', views.reports_view, name='reports'),
     path('inventory/', views.inventory_view, name='inventory'),
