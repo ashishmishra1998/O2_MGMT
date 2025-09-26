@@ -686,11 +686,14 @@ def create_custom_bill(request, client_id):
         next_challan = get_next_challan_number()
         bt_objs = []
         for txn in selected_transactions:
-            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=next_challan))
+            # Use transaction's challan_number if available, otherwise generate new one
+            challan_to_use = txn.challan_number if txn.challan_number else next_challan
+            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=challan_to_use))
             for row in transaction_rows:
                 if row['txn'] == txn:
-                    row['challan_no'] = next_challan
-            next_challan += 1
+                    row['challan_no'] = challan_to_use
+            if not txn.challan_number:  # Only increment if we generated a new number
+                next_challan += 1
         BillTransaction.objects.bulk_create(bt_objs)
 
         # mark selected txns billed
@@ -759,7 +762,8 @@ def generate_bill(request, client_id, bill_id=None):
             transaction_rows, subtotal = build_transaction_rows(txns, admin_client)
             for row in transaction_rows:
                 bt = next(bt for bt in bts if bt.transaction_id == row['txn'].id)
-                row['challan_no'] = bt.challan_number
+                # Use transaction's challan_number if available, otherwise use BillTransaction's challan_number
+                row['challan_no'] = row['txn'].challan_number if row['txn'].challan_number else bt.challan_number
         # Compute totals based on actual subtotal (if bill already has fields, keep them consistent)
         # Use bill fields if present; otherwise compute from subtotal
         if getattr(bill, 'subtotal_amount', None):

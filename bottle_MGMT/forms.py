@@ -44,11 +44,15 @@ class AdminProfileForm(forms.ModelForm):
 class TransactionForm(forms.ModelForm):
     class Meta:
         model = Transaction
-        fields = ['client', 'bottles', 'transaction_type', 'custom_date']
+        fields = ['client', 'bottles', 'transaction_type', 'custom_date', 'challan_number']
         widgets = {
             'custom_date': forms.DateTimeInput(attrs={
                 'type': 'datetime-local',
                 'class': 'form-control'
+            }),
+            'challan_number': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter challan number'
             })
         }
 

@@ -38,6 +38,7 @@
             <th>Client</th>
             <th>Bottles</th>
             <th>Type</th>
+            <th>Challan No.</th>
             <th>Delivered By</th>
         </tr>
     </thead>
@@ -61,6 +62,7 @@
                 {% include 'partials/transaction_bottle_modal.html' with transaction=t %}
             </td>
             <td>{{ t.get_transaction_type_display }}</td>
+            <td>{{ t.challan_number|default:"-" }}</td>
             <td>{{ t.delivered_by.username }}</td>
         </tr>
         {% empty %}
