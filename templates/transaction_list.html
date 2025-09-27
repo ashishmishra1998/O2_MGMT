@@ -40,6 +40,7 @@
             <th>Type</th>
             <th>Challan No.</th>
             <th>Delivered By</th>
+            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -64,6 +65,11 @@
             <td>{{ t.get_transaction_type_display }}</td>
             <td>{{ t.challan_number|default:"-" }}</td>
             <td>{{ t.delivered_by.username }}</td>
+            <td>
+                <a href="{% url 'transaction_edit' t.id %}" class="btn btn-sm btn-warning">
+                    Edit
+                </a>
+            </td>
         </tr>
         {% empty %}
         <tr>

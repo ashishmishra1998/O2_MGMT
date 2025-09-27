@@ -110,6 +110,7 @@ class Transaction(models.Model):
     transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPE)
     challan_number = models.IntegerField(null=True, blank=True, help_text="Challan number for this transaction")
     billed = models.BooleanField(default=False)  # Track if this transaction has been billed
+    challan_number = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.bottle} - {self.transaction_type} - {self.client}"

@@ -15,7 +15,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.http import HttpResponseForbidden
 from .models import BottlePricing
-from .forms import BottlePricingForm
+from .forms import BottlePricingForm, TransactionEditForm
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
@@ -272,9 +272,9 @@ def client_list(request):
 
             # Get actual list of pending bottles
             pending_bottles_list = Bottle.objects.filter(
-                transaction__client=client,
-                status="delivered"
-            ).select_related("category")
+                status="delivered",
+                transaction__client=client
+            ).distinct().select_related("category")
 
             # Unbilled bottles
             pending_bill_bottles = sum(
@@ -397,7 +397,23 @@ def transaction_list(request):
         'selected_type': transaction_type,
         'page_obj': page_obj,  # useful for pagination controls
     })
-
+@login_required
+def transaction_edit(request, pk):
+    transaction = get_object_or_404(Transaction, pk=pk)
+    
+    if request.method == 'POST':
+        form = TransactionEditForm(request.POST, instance=transaction)
+        if form.is_valid():
+            form.save()
+            return redirect('transaction_list')
+    else:
+        form = TransactionEditForm(instance=transaction)
+    
+    return render(request, 'transaction_edit.html', {
+        'form': form,
+        'transaction': transaction
+    })
+    
 @staff_member_required
 def reports_view(request):
     if not request.user.is_staff:
@@ -566,15 +582,17 @@ def pricing_view(request):
 def custom_billing_view(request, client_id):
     """View client transactions for custom billing"""
     client = get_object_or_404(Client, id=client_id)
-    
+
     # Get date filters
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
     transaction_type = request.GET.get('transaction_type', '')
-    
-    # Get all transactions for this client
-    transactions = Transaction.objects.filter(client=client, transaction_type='delivered').order_by('-date')
-    
+
+    # Get all transactions for this client (delivered only by default)
+    transactions = Transaction.objects.filter(
+        client=client, transaction_type='delivered'
+    ).order_by('-date')
+
     # Apply filters
     if start_date:
         try:
@@ -582,28 +600,27 @@ def custom_billing_view(request, client_id):
             transactions = transactions.filter(date__date__gte=start_date)
         except ValueError:
             pass
-    
+
     if end_date:
         try:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
             transactions = transactions.filter(date__date__lte=end_date)
         except ValueError:
             pass
-    
+
     if transaction_type:
         transactions = transactions.filter(transaction_type=transaction_type)
-    
+
     # Group transactions by date
     transactions_by_date = {}
     for transaction in transactions:
         date_key = transaction.date.strftime('%Y-%m-%d')
-        if date_key not in transactions_by_date:
-            transactions_by_date[date_key] = []
-        transactions_by_date[date_key].append(transaction)
-    
-    # Get pricing
-    price = BottlePricing.get_solo().price
-    
+        transactions_by_date.setdefault(date_key, []).append(transaction)
+
+    # Get category-wise pricing
+    from .models import BottleCategory
+    categories = BottleCategory.objects.all().values("name", "price")
+
     # Get already custom billed transactions
     custom_billed_transactions = set()
     custom_bills = Bill.objects.filter(client=client, bill_type='custom')
@@ -611,17 +628,17 @@ def custom_billing_view(request, client_id):
         custom_billed_transactions.update(
             bill.bill_transactions.values_list('transaction_id', flat=True)
         )
-    
+
     context = {
         'client': client,
         'transactions_by_date': transactions_by_date,
-        'price': price,
+        'categories': categories,
         'custom_billed_transactions': custom_billed_transactions,
         'start_date': start_date,
         'end_date': end_date,
         'transaction_type': transaction_type,
     }
-    
+
     return render(request, 'custom_billing.html', context)
 
 @staff_member_required
@@ -652,6 +669,7 @@ def create_custom_bill(request, client_id):
 
     # Build itemized rows and compute subtotal correctly from per-row rates
     admin_client = Client.objects.filter(role='admin').first()
+
     transaction_rows, subtotal = build_transaction_rows(selected_transactions, admin_client)
 
 
@@ -686,14 +704,20 @@ def create_custom_bill(request, client_id):
         next_challan = get_next_challan_number()
         bt_objs = []
         for txn in selected_transactions:
-            # Use transaction's challan_number if available, otherwise generate new one
-            challan_to_use = txn.challan_number if txn.challan_number else next_challan
-            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=challan_to_use))
+            challan_no = txn.challan_number if txn.challan_number else next_challan
+
+            # if challan not already set, persist it to the transaction
+            if not txn.challan_number:
+                txn.challan_number = challan_no
+                txn.save(update_fields=['challan_number'])
+                next_challan += 1
+
+            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=challan_no))
+
+            # also push challan number into transaction_rows for display
             for row in transaction_rows:
                 if row['txn'] == txn:
-                    row['challan_no'] = challan_to_use
-            if not txn.challan_number:  # Only increment if we generated a new number
-                next_challan += 1
+                    row['challan_no'] = challan_no
         BillTransaction.objects.bulk_create(bt_objs)
 
         # mark selected txns billed
@@ -856,11 +880,18 @@ def generate_bill(request, client_id, bill_id=None):
         next_challan = get_next_challan_number()
         bt_objs = []
         for txn in delivered_txns:
-            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=next_challan))
+            challan_no = txn.challan_number if txn.challan_number else next_challan
+
+            if not txn.challan_number:
+                txn.challan_number = challan_no
+                txn.save(update_fields=['challan_number'])
+                next_challan += 1
+
+            bt_objs.append(BillTransaction(bill=bill, transaction=txn, challan_number=challan_no))
+
             for row in transaction_rows:
                 if row['txn'] == txn:
-                    row['challan_no'] = next_challan
-            next_challan += 1
+                    row['challan_no'] = challan_no
         BillTransaction.objects.bulk_create(bt_objs)
 
         # mark as billed (exclude custom-linked)
@@ -891,6 +922,8 @@ def generate_bill(request, client_id, bill_id=None):
     if request.GET.get('format') == 'pdf':
         return generate_pdf_bill(request, context)
     return render(request, 'generate_bill.html', context)
+
+
 # Helper used above
 def default_rate_for_transaction(txn: Transaction):
     """
