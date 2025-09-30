@@ -102,7 +102,10 @@ class ManualBillForm(forms.Form):
 
     bill_date = forms.DateTimeField(
         label='Bill Date',
-        widget=forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control'}),
+        widget=forms.DateTimeInput(
+            attrs={'type': 'datetime-local', 'class': 'form-control'},
+            format='%Y-%m-%dT%H:%M:%S'   # important!
+        ),
         initial=lambda: timezone.now()
     )
 
