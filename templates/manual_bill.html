@@ -3,308 +3,178 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h4 class="card-title mb-0">Create Manual Bill</h4>
-                    <p class="text-muted mb-0">Manually enter all bill details and generate invoice</p>
-                </div>
-                <div class="card-body">
-                    <form method="post" id="manualBillForm">
-                        {% csrf_token %}
-                        
-                        <!-- Client Information -->
-                        <div class="row mb-4">
-                            <div class="col-12">
-                                <h5 class="text-primary border-bottom pb-2">Client Information</h5>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="{{ form.client.id_for_label }}">{{ form.client.label }}</label>
-                                    {{ form.client }}
-                                    {% if form.client.errors %}
-                                        <div class="text-danger">{{ form.client.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="{{ form.bill_date.id_for_label }}">{{ form.bill_date.label }}</label>
-                                    {{ form.bill_date }}
-                                    {% if form.bill_date.errors %}
-                                        <div class="text-danger">{{ form.bill_date.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Transaction Details -->
-                        <div class="row mb-4">
-                            <div class="col-12">
-                                <h5 class="text-primary border-bottom pb-2">Transaction Details</h5>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label for="{{ form.transaction_date.id_for_label }}">{{ form.transaction_date.label }}</label>
-                                    {{ form.transaction_date }}
-                                    {% if form.transaction_date.errors %}
-                                        <div class="text-danger">{{ form.transaction_date.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label for="{{ form.gas_type.id_for_label }}">{{ form.gas_type.label }}</label>
-                                    {{ form.gas_type }}
-                                    {% if form.gas_type.errors %}
-                                        <div class="text-danger">{{ form.gas_type.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label for="{{ form.challan_number.id_for_label }}">{{ form.challan_number.label }}</label>
-                                    {{ form.challan_number }}
-                                    {% if form.challan_number.errors %}
-                                        <div class="text-danger">{{ form.challan_number.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label for="{{ form.hsn_code.id_for_label }}">{{ form.hsn_code.label }}</label>
-                                    {{ form.hsn_code }}
-                                    {% if form.hsn_code.errors %}
-                                        <div class="text-danger">{{ form.hsn_code.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Quantity and Pricing -->
-                        <div class="row mb-4">
-                            <div class="col-12">
-                                <h5 class="text-primary border-bottom pb-2">Quantity & Pricing</h5>
-                            </div>
-                            <div class="col-md-2">
-                                <div class="form-group">
-                                    <label for="{{ form.quantity.id_for_label }}">{{ form.quantity.label }}</label>
-                                    {{ form.quantity }}
-                                    {% if form.quantity.errors %}
-                                        <div class="text-danger">{{ form.quantity.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-2">
-                                <div class="form-group">
-                                    <label for="{{ form.cum_value.id_for_label }}">{{ form.cum_value.label }}</label>
-                                    {{ form.cum_value }}
-                                    {% if form.cum_value.errors %}
-                                        <div class="text-danger">{{ form.cum_value.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-2">
-                                <div class="form-group">
-                                    <label for="{{ form.total_quantity.id_for_label }}">{{ form.total_quantity.label }}</label>
-                                    {{ form.total_quantity }}
-                                    {% if form.total_quantity.errors %}
-                                        <div class="text-danger">{{ form.total_quantity.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label for="{{ form.rate_per_bottle.id_for_label }}">{{ form.rate_per_bottle.label }}</label>
-                                    {{ form.rate_per_bottle }}
-                                    {% if form.rate_per_bottle.errors %}
-                                        <div class="text-danger">{{ form.rate_per_bottle.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label for="{{ form.subtotal_amount.id_for_label }}">{{ form.subtotal_amount.label }}</label>
-                                    {{ form.subtotal_amount }}
-                                    {% if form.subtotal_amount.errors %}
-                                        <div class="text-danger">{{ form.subtotal_amount.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Financial Calculations -->
-                        <div class="row mb-4">
-                            <div class="col-12">
-                                <h5 class="text-primary border-bottom pb-2">Financial Details</h5>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label for="{{ form.discount_percentage.id_for_label }}">{{ form.discount_percentage.label }}</label>
-                                    {{ form.discount_percentage }}
-                                    {% if form.discount_percentage.errors %}
-                                        <div class="text-danger">{{ form.discount_percentage.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label for="{{ form.discount_amount.id_for_label }}">{{ form.discount_amount.label }}</label>
-                                    {{ form.discount_amount }}
-                                    {% if form.discount_amount.errors %}
-                                        <div class="text-danger">{{ form.discount_amount.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label for="{{ form.taxable_amount.id_for_label }}">{{ form.taxable_amount.label }}</label>
-                                    {{ form.taxable_amount }}
-                                    {% if form.taxable_amount.errors %}
-                                        <div class="text-danger">{{ form.taxable_amount.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="form-group">
-                                    <label for="{{ form.gst_percentage.id_for_label }}">{{ form.gst_percentage.label }}</label>
-                                    {{ form.gst_percentage }}
-                                    {% if form.gst_percentage.errors %}
-                                        <div class="text-danger">{{ form.gst_percentage.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="row mb-4">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="{{ form.gst_amount.id_for_label }}">{{ form.gst_amount.label }}</label>
-                                    {{ form.gst_amount }}
-                                    {% if form.gst_amount.errors %}
-                                        <div class="text-danger">{{ form.gst_amount.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="{{ form.final_amount.id_for_label }}">{{ form.final_amount.label }}</label>
-                                    {{ form.final_amount }}
-                                    {% if form.final_amount.errors %}
-                                        <div class="text-danger">{{ form.final_amount.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Description -->
-                        <div class="row mb-4">
-                            <div class="col-12">
-                                <div class="form-group">
-                                    <label for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
-                                    {{ form.description }}
-                                    {% if form.description.errors %}
-                                        <div class="text-danger">{{ form.description.errors }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Form Actions -->
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="form-group text-center">
-                                    <button type="submit" class="btn btn-primary btn-lg">
-                                        <i class="fas fa-file-invoice"></i> Generate Bill
-                                    </button>
-                                    <a href="{% url 'client_list' %}" class="btn btn-secondary btn-lg ml-2">
-                                        <i class="fas fa-arrow-left"></i> Back to Clients
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h4 class="card-title mb-0">Create Manual Bill</h4>
+          <p class="text-muted mb-0">Enter multiple transactions and generate invoice like actual bills</p>
         </div>
+        <div class="card-body">
+          <form method="post" id="manualBillForm">
+            {% csrf_token %}
+
+            <!-- Client Info -->
+            <div class="row mb-4">
+              <div class="col-md-6">
+                {{ form.client.label_tag }} {{ form.client }}
+              </div>
+              <div class="col-md-6">
+                {{ form.bill_date.label_tag }} {{ form.bill_date }}
+              </div>
+            </div>
+
+            <!-- Transaction Table -->
+            <div class="mb-4">
+              <h5 class="text-primary border-bottom pb-2">Transaction Details</h5>
+              <table class="table table-bordered text-center" id="transactionTable"  data-default-hsn="{{ default_hsn|default_if_none:'' }}"  data-default-cum="{{ default_cum|default_if_none:'' }}">
+                <thead class="table-light">
+                  <tr>
+                    <th>Date</th>
+                    <th>Gas Type</th>
+                    <th>Challan</th>
+                    <th>HSN</th>
+                    <th>CUM</th>
+                    <th>Qty</th>
+                    <th>Rate</th>
+                    <th>Subtotal</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="transactionRows">
+                  <tr>
+                    <td><input type="date" name="transaction_date[]" class="form-control"></td>
+                    <td>{{ form.gas_type }}</td>
+                    <td><input type="text" name="challan_number[]" class="form-control"></td>
+                    <td><input type="text" name="hsn_code[]" class="form-control" value="{{ default_hsn|default_if_none:'' }}"></td>
+                    <td><input type="text" name="cum_value[]" class="form-control" value="{{ default_cum|default_if_none:'' }}"></td>
+                    <td><input type="number" name="quantity[]" step="1" class="form-control qty"></td>
+                    <td><input type="number" name="rate_per_bottle[]" step="0.01" class="form-control rate"></td>
+                    <td><input type="text" name="subtotal_amount[]" class="form-control subtotal" readonly></td>
+                    <td><button type="button" class="btn btn-danger btn-sm removeRow">Remove</button></td>
+                  </tr>
+                </tbody>
+              </table>
+              <button type="button" id="addRow" class="btn btn-success btn-sm">+ Add Row</button>
+            </div>
+
+            <!-- Financial Summary -->
+            <div class="row mb-4">
+              <div class="col-md-2">
+                {{ form.discount_percentage.label_tag }} {{ form.discount_percentage }}
+              </div>
+              <div class="col-md-2">
+                {{ form.discount_amount.label_tag }} {{ form.discount_amount }}
+              </div>
+              <div class="col-md-2">
+                {{ form.taxable_amount.label_tag }} {{ form.taxable_amount }}
+              </div>
+              <div class="col-md-2">
+                {{ form.gst_percentage.label_tag }} {{ form.gst_percentage }}
+              </div>
+              <div class="col-md-2">
+                {{ form.gst_amount.label_tag }} {{ form.gst_amount }}
+              </div>
+              <div class="col-md-2">
+                {{ form.final_amount.label_tag }} {{ form.final_amount }}
+              </div>
+            </div>
+
+            <!-- Description -->
+            <div class="mb-4">
+              {{ form.description.label_tag }} {{ form.description }}
+            </div>
+
+            <!-- Actions -->
+            <div class="text-center">
+              <button type="submit" class="btn btn-primary btn-lg">
+                <i class="fas fa-file-invoice"></i> Generate Bill
+              </button>
+              <a href="{% url 'client_list' %}" class="btn btn-secondary btn-lg ml-2">
+                <i class="fas fa-arrow-left"></i> Back to Clients
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
+  </div>
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Auto-calculate amounts when quantity or rate changes
-    const quantityField = document.getElementById('{{ form.quantity.id_for_label }}');
-    const rateField = document.getElementById('{{ form.rate_per_bottle.id_for_label }}');
-    const discountPctField = document.getElementById('{{ form.discount_percentage.id_for_label }}');
-    const gstPctField = document.getElementById('{{ form.gst_percentage.id_for_label }}');
-    const gasTypeField = document.getElementById('{{ form.gas_type.id_for_label }}');
-    
-    const subtotalField = document.getElementById('{{ form.subtotal_amount.id_for_label }}');
-    const discountAmountField = document.getElementById('{{ form.discount_amount.id_for_label }}');
-    const taxableField = document.getElementById('{{ form.taxable_amount.id_for_label }}');
-    const gstAmountField = document.getElementById('{{ form.gst_amount.id_for_label }}');
-    const finalAmountField = document.getElementById('{{ form.final_amount.id_for_label }}');
-    
-    function calculateAmounts() {
-        const quantity = parseFloat(quantityField.value) || 0;
-        const rate = parseFloat(rateField.value) || 0;
-        const discountPct = parseFloat(discountPctField.value) || 0;
-        const gstPct = parseFloat(gstPctField.value) || 0;
-        
-        const subtotal = quantity * rate;
-        const discountAmount = (subtotal * discountPct) / 100;
-        const taxableAmount = subtotal - discountAmount;
-        const gstAmount = (taxableAmount * gstPct) / 100;
-        const finalAmount = taxableAmount + gstAmount;
-        
-        subtotalField.value = subtotal.toFixed(2);
-        discountAmountField.value = discountAmount.toFixed(2);
-        taxableField.value = taxableAmount.toFixed(2);
-        gstAmountField.value = gstAmount.toFixed(2);
-        finalAmountField.value = finalAmount.toFixed(2);
-    }
-    
-    // Add event listeners
-    [quantityField, rateField, discountPctField, gstPctField].forEach(field => {
-        if (field) {
-            field.addEventListener('input', calculateAmounts);
-        }
+document.addEventListener("DOMContentLoaded", function() {
+  const tbody = document.getElementById("transactionRows");
+  const addRowBtn = document.getElementById("addRow");
+
+  function calculateRow(row) {
+    const qty = parseFloat(row.querySelector(".qty")?.value) || 0;
+    const rate = parseFloat(row.querySelector(".rate")?.value) || 0;
+    const subtotal = qty * rate;
+    row.querySelector(".subtotal").value = subtotal.toFixed(2);
+    return subtotal;
+  }
+
+  function calculateTotals() {
+    let subtotalSum = 0;
+    tbody.querySelectorAll("tr").forEach(row => {
+      subtotalSum += calculateRow(row);
     });
-    
-    // Initial calculation
-    calculateAmounts();
-    
-    // Set total quantity equal to quantity by default
-    const totalQuantityField = document.getElementById('{{ form.total_quantity.id_for_label }}');
-    if (quantityField && totalQuantityField) {
-        quantityField.addEventListener('input', function() {
-            totalQuantityField.value = this.value;
-        });
+
+    const discountPct = parseFloat(document.getElementById("id_discount_percentage")?.value) || 0;
+    const gstPct = parseFloat(document.getElementById("id_gst_percentage")?.value) || 0;
+
+    const discountAmt = (subtotalSum * discountPct) / 100;
+    const taxable = subtotalSum - discountAmt;
+    const gstAmt = (taxable * gstPct) / 100;
+    const finalAmt = taxable + gstAmt;
+
+    const discountAmountField = document.getElementById("id_discount_amount");
+    const taxableField = document.getElementById("id_taxable_amount");
+    const gstAmountField = document.getElementById("id_gst_amount");
+    const finalAmountField = document.getElementById("id_final_amount");
+
+    if (discountAmountField) discountAmountField.value = discountAmt.toFixed(2);
+    if (taxableField) taxableField.value = taxable.toFixed(2);
+    if (gstAmountField) gstAmountField.value = gstAmt.toFixed(2);
+    if (finalAmountField) finalAmountField.value = finalAmt.toFixed(2);
+  }
+
+addRowBtn.addEventListener("click", function() {
+    const defaultHsn = tbody.closest("#transactionTable").dataset.defaultHsn || '';
+    const defaultCum = tbody.closest("#transactionTable").dataset.defaultCum || '';
+
+    const newRow = document.createElement("tr");
+    newRow.innerHTML = `
+      <td><input type="date" name="transaction_date[]" class="form-control"></td>
+      <td>{{ form.gas_type }}</td>
+      <td><input type="text" name="challan_number[]" class="form-control"></td>
+      <td><input type="text" name="hsn_code[]" class="form-control" value="${defaultHsn}"></td>
+      <td><input type="text" name="cum_value[]" class="form-control" value="${defaultCum}"></td>
+      <td><input type="number" name="quantity[]" step="1" class="form-control qty"></td>
+      <td><input type="number" name="rate_per_bottle[]" step="0.01" class="form-control rate"></td>
+      <td><input type="text" name="subtotal_amount[]" class="form-control subtotal" readonly></td>
+      <td><button type="button" class="btn btn-danger btn-sm removeRow">Remove</button></td>
+    `;
+    tbody.appendChild(newRow);
+});
+
+  tbody.addEventListener("click", function(e) {
+    if (e.target.classList.contains("removeRow")) {
+      e.target.closest("tr").remove();
+      calculateTotals();
     }
-    
-    // Auto-populate rate when gas type is selected
-    if (gasTypeField && rateField) {
-        gasTypeField.addEventListener('change', function() {
-            const selectedOption = this.options[this.selectedIndex];
-            if (selectedOption.value) {
-                // Get the price from the option's text
-                const priceText = selectedOption.text;
-                const priceMatch = priceText.match(/\(Rs\.\s*([0-9.]+)\)/);
-                if (priceMatch) {
-                    rateField.value = priceMatch[1];
-                    calculateAmounts(); // Recalculate amounts
-                } else {
-                    // If no price found, try to extract from the text
-                    const numberMatch = priceText.match(/([0-9.]+)/);
-                    if (numberMatch) {
-                        rateField.value = numberMatch[1];
-                        calculateAmounts();
-                    }
-                }
-            }
-        });
+  });
+
+  tbody.addEventListener("input", function(e) {
+    if (e.target.classList.contains("qty") || e.target.classList.contains("rate")) {
+      calculateTotals();
     }
+  });
+
+  document.getElementById("id_discount_percentage")?.addEventListener("input", calculateTotals);
+  document.getElementById("id_gst_percentage")?.addEventListener("input", calculateTotals);
+
+  calculateTotals();
 });
 </script>
 {% endblock %}
