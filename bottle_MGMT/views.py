@@ -1690,8 +1690,6 @@ def manual_bill_create(request):
 
                 # Create Bill and ManualBillRow(s)
                 with db_transaction.atomic():
-                    print("client >> ", client)
-                    print("client >> ", client.id)
                     bill = Bill.objects.create(
                         client_id=client.id,  # Pass ID instead of object
                         bill_date=bill_date,

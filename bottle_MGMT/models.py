@@ -129,7 +129,7 @@ class Bill(models.Model):
         ('manual', 'Manual'),
     ]
     client = models.ForeignKey(Client, on_delete=models.CASCADE)
-    bill_date = models.DateTimeField(auto_now_add=True)
+    bill_date = models.DateTimeField(default=timezone.now)
     delivered_bottles = models.IntegerField()
     returned_bottles = models.IntegerField()
     pending_bottles = models.IntegerField()
