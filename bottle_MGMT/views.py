@@ -397,22 +397,42 @@ def transaction_list(request):
         'selected_type': transaction_type,
         'page_obj': page_obj,  # useful for pagination controls
     })
+
+# views.py
 @login_required
 def transaction_edit(request, pk):
     transaction = get_object_or_404(Transaction, pk=pk)
-    
+
     if request.method == 'POST':
-        form = TransactionEditForm(request.POST, instance=transaction)
+        form = TransactionForm(request.POST, request.FILES, instance=transaction)
         if form.is_valid():
-            form.save()
+            updated_transaction = form.save(commit=False)
+
+            # Photos handling
+            photos = request.FILES.getlist('photos')
+            for photo in photos:
+                TransactionPhoto.objects.create(transaction=transaction, image=photo)
+
+            updated_transaction.save()
+            form.save_m2m()
+
+            # Bottle status updates (only if not billed)
+            if not transaction.billed:
+                bottles = transaction.bottles.all()
+                if transaction.transaction_type == 'delivered':
+                    bottles.update(status='delivered')
+                elif transaction.transaction_type == 'returned':
+                    bottles.update(status='in_stock')
+
             return redirect('transaction_list')
     else:
-        form = TransactionEditForm(instance=transaction)
-    
+        form = TransactionForm(instance=transaction)
+
     return render(request, 'transaction_edit.html', {
         'form': form,
         'transaction': transaction
     })
+
     
 @staff_member_required
 def reports_view(request):
