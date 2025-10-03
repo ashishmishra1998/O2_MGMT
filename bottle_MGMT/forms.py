@@ -58,19 +58,29 @@ class TransactionForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         transaction_type = kwargs.pop('transaction_type', None)
+        transaction = kwargs.get('instance')  # Will be set when editing
         super().__init__(*args, **kwargs)
-        
+
         self.fields['custom_date'].required = False
         self.fields['custom_date'].help_text = "Optional: Leave blank to use current date/time"
-        
-        if transaction_type == 'delivered':
-            self.fields['bottles'].queryset = Bottle.objects.filter(status='in_stock')
-        elif transaction_type == 'returned':
-            # Initially empty; filtered by client via AJAX
-            self.fields['bottles'].queryset = Bottle.objects.none()
-        else:
-            self.fields['bottles'].queryset = Bottle.objects.all()
 
+        # --- Create behavior ---
+        if not transaction:  # Creating new transaction
+            if transaction_type == 'delivered':
+                self.fields['bottles'].queryset = Bottle.objects.filter(status='in_stock')
+            elif transaction_type == 'returned':
+                # Initially empty; filtered by client via AJAX
+                self.fields['bottles'].queryset = Bottle.objects.none()
+            else:
+                self.fields['bottles'].queryset = Bottle.objects.all()
+
+        # --- Edit behavior ---
+        if transaction and transaction.billed:
+            # Lock certain fields if billed
+            locked_fields = ['client', 'bottles', 'transaction_type']
+            for field in locked_fields:
+                self.fields[field].disabled = True
+    
 class TransactionEditForm(forms.ModelForm):
     class Meta:
         model = Transaction
