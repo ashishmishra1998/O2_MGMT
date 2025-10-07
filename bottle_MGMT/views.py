@@ -443,6 +443,26 @@ def transaction_edit(request, pk):
         'transaction': transaction
     })
 
+@login_required
+def transaction_delete(request, pk):
+    transaction = get_object_or_404(Transaction, pk=pk)
+    if request.method == 'POST':
+        # Revert bottle statuses based on transaction type
+        bottles_qs = transaction.bottles.all()
+        if transaction.transaction_type == 'delivered':
+            bottles_qs.update(status='in_stock')
+        elif transaction.transaction_type == 'returned':
+            # A return indicates previously delivered bottles came back; removing this should mark them delivered again
+            bottles_qs.update(status='delivered')
+
+        # Remove any BillTransaction links and possibly adjust billed flag
+        BillTransaction.objects.filter(transaction=transaction).delete()
+        # If it was marked billed, clear it (for consistency; record is being deleted anyway)
+        transaction.delete()
+        messages.success(request, 'Transaction deleted successfully.')
+        return redirect('transaction_list')
+    return render(request, 'delete_bill.html', { 'bill': None })
+
     
 @staff_member_required
 def reports_view(request):

@@ -72,6 +72,10 @@
                 <a href="{% url 'transaction_edit' t.id %}" class="btn btn-sm btn-warning">
                     Edit
                 </a>
+                <form action="{% url 'transaction_delete' t.id %}" method="post" style="display:inline" onsubmit="return confirm('Delete this transaction? This will adjust bottle statuses accordingly.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                </form>
             </td>
         </tr>
         {% empty %}
