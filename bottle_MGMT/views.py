@@ -22,6 +22,7 @@ from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from io import BytesIO
 from django.db.models import Q, F
+from django.db.models.functions import Coalesce
 from datetime import datetime  
 from decimal import Decimal, InvalidOperation
 from .utils import compute_totals, get_next_challan_number, compute_totals_from_subtotal, build_transaction_rows, number_to_words
@@ -371,7 +372,8 @@ def transaction_list(request):
     else:
         transactions = Transaction.objects.all()
     
-    transactions = transactions.order_by('-date')
+    # Default ordering: by effective date (custom_date if set, else date) descending
+    transactions = transactions.order_by(Coalesce('custom_date', 'date').desc())
 
     # Filtering
     client_id = request.GET.get('client')
@@ -384,6 +386,10 @@ def transaction_list(request):
         if transaction_type == 'challan_asc':
             # Order by challan number ascending; place NULLs last consistently
             transactions = transactions.order_by(F('challan_number').asc(nulls_last=True))
+        elif transaction_type == 'date_asc':
+            transactions = transactions.order_by(Coalesce('custom_date', 'date').asc())
+        elif transaction_type == 'date_desc':
+            transactions = transactions.order_by(Coalesce('custom_date', 'date').desc())
         else:
             transactions = transactions.filter(transaction_type=transaction_type)
 
