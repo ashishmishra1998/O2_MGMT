@@ -21,7 +21,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from io import BytesIO
-from django.db.models import Q
+from django.db.models import Q, F
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from .utils import compute_totals, get_next_challan_number, compute_totals_from_subtotal, build_transaction_rows, number_to_words
@@ -381,7 +381,11 @@ def transaction_list(request):
 
     transaction_type = request.GET.get('type')
     if transaction_type:
-        transactions = transactions.filter(transaction_type=transaction_type)
+        if transaction_type == 'challan_asc':
+            # Order by challan number ascending; place NULLs last consistently
+            transactions = transactions.order_by(F('challan_number').asc(nulls_last=True))
+        else:
+            transactions = transactions.filter(transaction_type=transaction_type)
 
     transactions = transactions.prefetch_related('bottles')
 
