@@ -22,7 +22,7 @@ from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from io import BytesIO
 from django.db.models import Q, F
-from datetime import datetime 
+from datetime import datetime  
 from decimal import Decimal, InvalidOperation
 from .utils import compute_totals, get_next_challan_number, compute_totals_from_subtotal, build_transaction_rows, number_to_words
 from reportlab.lib import colors
