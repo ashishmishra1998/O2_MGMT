@@ -129,7 +129,7 @@ class Bill(models.Model):
         ('manual', 'Manual'),
     ]
     client = models.ForeignKey(Client, on_delete=models.CASCADE)
-    bill_date = models.DateTimeField(auto_now_add=True)
+    bill_date = models.DateTimeField(default=timezone.now)
     delivered_bottles = models.IntegerField()
     returned_bottles = models.IntegerField()
     pending_bottles = models.IntegerField()
@@ -159,6 +159,33 @@ class Bill(models.Model):
 
     class Meta:
         ordering = ['-bill_date']
+
+
+class ManualBillRow(models.Model):
+    """
+    Store per-row details for manual bills. Kept separate from Transaction so
+    manual bills do not touch bottle inventory.
+    """
+    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name='manual_rows')
+    date = models.DateField()
+    # store gas type as name (human readable) to avoid FK coupling for historical/manual entries
+    gas_type = models.CharField(max_length=100)
+    challan_no = models.IntegerField(null=True, blank=True)
+    hsn = models.CharField(max_length=20, blank=True, null=True, default="28044090")
+    qty = models.IntegerField()
+    cum = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal('7.00'))
+    total_qty = models.IntegerField(default=0)
+    rate = models.DecimalField(max_digits=10, decimal_places=2)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['date']
+
+    def __str__(self):
+        return f"ManualRow(bill={self.bill_id}, gas={self.gas_type}, qty={self.qty}, challan={self.challan_no})"
+
 
 class BillTransaction(models.Model):
     """Model to track which transactions are included in custom bills"""

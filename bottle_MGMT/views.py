@@ -4,7 +4,7 @@ from django.db.models.signals import post_migrate
 from django.contrib.auth.models import User
 from django.http import HttpResponse
 from .forms import ClientForm, AddBottlesForm
-from .models import Client
+from .models import Client, ManualBillRow
 from .forms import TransactionForm, AdminProfileForm, BottlePricingForm, ClientForm, AddBottlesForm, BottleCategoryForm, ManualBillForm
 from .models import Transaction, Bottle, Bill, BillTransaction, TransactionPhoto, BottleCategory
 from django.contrib.auth.decorators import login_required
@@ -401,22 +401,42 @@ def transaction_list(request):
         'selected_type': transaction_type,
         'page_obj': page_obj,  # useful for pagination controls
     })
+
+# views.py
 @login_required
 def transaction_edit(request, pk):
     transaction = get_object_or_404(Transaction, pk=pk)
-    
+
     if request.method == 'POST':
-        form = TransactionEditForm(request.POST, instance=transaction)
+        form = TransactionForm(request.POST, request.FILES, instance=transaction)
         if form.is_valid():
-            form.save()
+            updated_transaction = form.save(commit=False)
+
+            # Photos handling
+            photos = request.FILES.getlist('photos')
+            for photo in photos:
+                TransactionPhoto.objects.create(transaction=transaction, image=photo)
+
+            updated_transaction.save()
+            form.save_m2m()
+
+            # Bottle status updates (only if not billed)
+            if not transaction.billed:
+                bottles = transaction.bottles.all()
+                if transaction.transaction_type == 'delivered':
+                    bottles.update(status='delivered')
+                elif transaction.transaction_type == 'returned':
+                    bottles.update(status='in_stock')
+
             return redirect('transaction_list')
     else:
-        form = TransactionEditForm(instance=transaction)
-    
+        form = TransactionForm(instance=transaction)
+
     return render(request, 'transaction_edit.html', {
         'form': form,
         'transaction': transaction
     })
+
     
 @staff_member_required
 def reports_view(request):
@@ -764,24 +784,23 @@ def generate_bill(request, client_id, bill_id=None):
         
         # Handle manual bills differently
         if bill.manual_bill:
-            # Use stored manual bill data
-            gas_type = bill.manual_gas_type or 'Manual Entry'
-            challan_no = bill.manual_challan_number or 1
-            
-            # For manual bills, create a mock transaction row from bill data
-            transaction_rows = [{
-                'date': bill.bill_date.date(),
-                'gas': gas_type,
-                'challan_no': challan_no,
-                'hsn': admin_client.hsn_code if admin_client else '28044090',
-                'qty': bill.delivered_bottles,
-                'cum': admin_client.cum_value if admin_client else Decimal('7.00'),
-                'total_qty': bill.delivered_bottles,
-                'rate': bill.price_per_bottle,
-                'amount': bill.subtotal_amount,
-                'txn': None
-            }]
-            subtotal = bill.subtotal_amount
+            rows = bill.manual_rows.all().order_by('date')
+            transaction_rows = []
+            subtotal = Decimal('0.00')
+            for r in rows:
+                transaction_rows.append({
+                    'date': r.date,
+                    'gas': r.gas_type,
+                    'challan_no': r.challan_no,
+                    'hsn': r.hsn or (admin_client.hsn_code if admin_client else '28044090'),
+                    'qty': r.qty,
+                    'cum': r.cum,
+                    'total_qty': r.total_qty or r.qty,
+                    'rate': r.rate,
+                    'amount': r.amount,
+                    'txn': None
+                })
+                subtotal += (r.amount or Decimal('0.00'))
         else:
             # Regular bills with transactions
             bts = BillTransaction.objects.filter(bill=bill).select_related('transaction').order_by('transaction__date', 'created_at')
@@ -1575,101 +1594,175 @@ def category_edit(request, category_id):
 
 @staff_member_required
 def manual_bill_create(request):
-    """Create a manual bill with all details entered manually"""
+    """Create a manual bill with multiple rows (uses ManualBillRow)."""
     if request.method == 'POST':
         form = ManualBillForm(request.POST)
         if form.is_valid():
             try:
-                # Get form data
                 client = form.cleaned_data['client']
                 bill_date = form.cleaned_data['bill_date']
-                transaction_date = form.cleaned_data['transaction_date']
-                gas_category = form.cleaned_data['gas_type']  # This is now a BottleCategory object
-                challan_number = form.cleaned_data['challan_number']
-                hsn_code = form.cleaned_data['hsn_code']
-                quantity = form.cleaned_data['quantity']
-                cum_value = form.cleaned_data['cum_value']
-                total_quantity = form.cleaned_data['total_quantity']
-                rate_per_bottle = form.cleaned_data['rate_per_bottle']
-                
-                # Financial data
-                subtotal_amount = form.cleaned_data['subtotal_amount']
-                discount_percentage = form.cleaned_data['discount_percentage']
-                discount_amount = form.cleaned_data['discount_amount']
-                taxable_amount = form.cleaned_data['taxable_amount']
-                gst_percentage = form.cleaned_data['gst_percentage']
-                gst_amount = form.cleaned_data['gst_amount']
-                final_amount = form.cleaned_data['final_amount']
-                description = form.cleaned_data['description']
-                
-                # Create the bill
+                default_hsn = form.cleaned_data.get('hsn_code') or (Client.objects.filter(role='admin').first().hsn_code if Client.objects.filter(role='admin').exists() else '28044090')
+                default_cum = form.cleaned_data.get('cum_value') or Decimal('7.00')
+                discount_pct = Decimal(form.cleaned_data.get('discount_percentage') or 0)
+                gst_pct = Decimal(form.cleaned_data.get('gst_percentage') or 18)
+                description = form.cleaned_data.get('description', '')
+
+                # helper to read lists posted as name[] or name
+                def post_list(key):
+                    vals = request.POST.getlist(key)
+                    if vals:
+                        return vals
+                    return request.POST.getlist(f"{key}[]")
+
+                dates = post_list('transaction_date')
+                gas_types = post_list('gas_type')            # may be category ids or names
+                challans = post_list('challan_number')
+                hsns = post_list('hsn_code')
+                cums = post_list('cum_value')
+                qtys = post_list('quantity')
+                rates = post_list('rate_per_bottle')
+
+                # Basic validation: need at least one row
+                if not dates or len(dates) == 0:
+                    messages.error(request, "Add at least one transaction row.")
+                    return render(request, 'manual_bill.html', {'form': form})
+
+                # normalize length to number of date entries
+                n_rows = len(dates)
+
+                rows_to_create = []
+                subtotal_sum = Decimal('0.00')
+                total_qty = 0
+
+                for i in range(n_rows):
+                    # date
+                    d_str = dates[i].strip() if i < len(dates) and dates[i] else ''
+                    try:
+                        # expecting YYYY-MM-DD from <input type="date">
+                        row_date = datetime.strptime(d_str, '%Y-%m-%d').date() if d_str else bill_date.date()
+                    except Exception:
+                        row_date = bill_date.date()
+
+                    # gas type (try to resolve BottleCategory name from id)
+                    gas_val = gas_types[i] if i < len(gas_types) else ''
+                    gas_name = ''
+                    if gas_val:
+                        try:
+                            # gas_val may be id or name
+                            bc = BottleCategory.objects.filter(id=gas_val).first()
+                            if bc:
+                                gas_name = bc.name
+                                # If rate not provided, fall back to bottle category price
+                                default_rate_for_row = bc.price
+                            else:
+                                gas_name = gas_val
+                                default_rate_for_row = None
+                        except Exception:
+                            gas_name = gas_val
+                            default_rate_for_row = None
+                    else:
+                        gas_name = 'Manual Entry'
+                        default_rate_for_row = None
+
+                    # challan
+                    challan_raw = challans[i] if i < len(challans) and challans[i] else None
+                    challan_no = int(challan_raw) if challan_raw else None
+
+                    # hsn & cum (use row if provided, otherwise fallback to default)
+                    hsn_row = hsns[i] if i < len(hsns) and hsns[i] else default_hsn
+                    cum_row = Decimal(cums[i]) if (i < len(cums) and cums[i]) else Decimal(default_cum)
+
+                    # qty & rate
+                    qty = int(qtys[i]) if i < len(qtys) and qtys[i] else 0
+                    rate = None
+                    if i < len(rates) and rates[i]:
+                        try:
+                            rate = Decimal(rates[i])
+                        except Exception:
+                            rate = Decimal('0.00')
+                    if (rate is None or rate == Decimal('0.00')) and default_rate_for_row:
+                        rate = Decimal(default_rate_for_row)
+
+                    amount = (Decimal(qty) * (rate or Decimal('0.00'))).quantize(Decimal('0.01'))
+
+                    subtotal_sum += amount
+                    total_qty += qty
+
+                    rows_to_create.append(ManualBillRow(
+                        date=row_date,
+                        gas_type=gas_name,
+                        challan_no=challan_no,
+                        hsn=hsn_row,
+                        qty=qty,
+                        cum=cum_row,
+                        total_qty=qty,
+                        rate=(rate or Decimal('0.00')),
+                        amount=amount
+                    ))
+
+                # Compute totals (discount applies on subtotal sum, then GST applied to taxable after discount)
+                discount_amount = (subtotal_sum * discount_pct / Decimal('100')).quantize(Decimal('0.01'))
+                taxable = (subtotal_sum - discount_amount).quantize(Decimal('0.01'))
+                gst_amount = (taxable * gst_pct / Decimal('100')).quantize(Decimal('0.01'))
+                final_amount = (taxable + gst_amount).quantize(Decimal('0.01'))
+
+                # price_per_bottle: weighted average (subtotal_sum / total_qty) if qty > 0
+                if total_qty > 0:
+                    price_per_bottle = (subtotal_sum / Decimal(total_qty)).quantize(Decimal('0.01'))
+                else:
+                    price_per_bottle = BottlePricing.get_solo().price
+
+                # Create Bill and ManualBillRow(s)
                 with db_transaction.atomic():
                     bill = Bill.objects.create(
-                        client=client,
+                        client_id=client.id,  # Pass ID instead of object
                         bill_date=bill_date,
-                        delivered_bottles=quantity,
+                        delivered_bottles=total_qty,
                         returned_bottles=0,
-                        pending_bottles=quantity,
-                        price_per_bottle=rate_per_bottle,
-                        total_amount=subtotal_amount,
-                        subtotal_amount=subtotal_amount,
-                        discount_percentage=discount_percentage,
+                        pending_bottles=total_qty,
+                        price_per_bottle=price_per_bottle,
+                        total_amount=subtotal_sum,
+                        subtotal_amount=subtotal_sum,
+                        discount_percentage=discount_pct,
                         discount_amount=discount_amount,
-                        taxable_amount=taxable_amount,
-                        gst_percentage=gst_percentage,
+                        taxable_amount=taxable,
+                        gst_percentage=gst_pct,
                         gst_amount=gst_amount,
                         final_amount=final_amount,
-                        generated_by=request.user,
+                        generated_by_id=request.user.id,  # Pass ID instead of object
                         bill_type='manual',
-                        description=description or f'Manual bill for {gas_category.name} - {quantity} bottles',
+                        description=description or f'Manual bill',
                         manual_bill=True,
-                        manual_gas_type=gas_category.name,
-                        manual_challan_number=challan_number
+                        manual_gas_type=None,
+                        manual_challan_number=None
                     )
-                
-                # Create a mock transaction row for display purposes
-                transaction_row = {
-                    'date': transaction_date,
-                    'gas': gas_category.name,  # Use the category name
-                    'challan_no': challan_number,
-                    'hsn': hsn_code,
-                    'qty': quantity,
-                    'cum': cum_value,
-                    'total_qty': total_quantity,
-                    'rate': rate_per_bottle,
-                    'amount': subtotal_amount,
-                    'txn': None  # No actual transaction for manual bills
-                }
-                
-                # Prepare context for bill display
-                admin_client = Client.objects.filter(role='admin').first()
-                cgst_amount = (gst_amount / Decimal('2')).quantize(Decimal('0.01')) if gst_amount else Decimal('0.00')
-                sgst_amount = cgst_amount
-                cgst_percentage = (gst_percentage / Decimal('2')).quantize(Decimal('0.01')) if gst_percentage else Decimal('0.00')
-                sgst_percentage = cgst_percentage
-                
-                context = {
-                    'client': client,
-                    'bill': bill,
-                    'transaction_rows': [transaction_row],
-                    'cgst_amount': cgst_amount,
-                    'sgst_amount': sgst_amount,
-                    'cgst_percentage': cgst_percentage,
-                    'sgst_percentage': sgst_percentage,
-                    'admin_client': admin_client,
-                    'amount_in_words': number_to_words(bill.final_amount),
-                }
-                
-                # Redirect to bill preview page
+
+                    # attach rows (set bill FK)
+                    for r in rows_to_create:
+                        r.bill = bill
+
+                    ManualBillRow.objects.bulk_create(rows_to_create)
+
+                # redirect to preview/generate
                 return redirect('generate_bill', client_id=client.id, bill_id=bill.id)
-                
+
             except Exception as e:
                 messages.error(request, f'Error creating manual bill: {str(e)}')
+                import traceback
+                traceback.print_exc()
                 return render(request, 'manual_bill.html', {'form': form})
+        else:
+            # form invalid
+            return render(request, 'manual_bill.html', {'form': form})
     else:
-        form = ManualBillForm()
-    
-    return render(request, 'manual_bill.html', {'form': form})
+        admin_client = Client.objects.filter(role='admin').first()
+        default_cum = admin_client.cum_value if admin_client and admin_client.cum_value else Decimal('7.00')
+        default_hsn = admin_client.hsn_code if admin_client and admin_client.hsn_code else '28044090'
+        form = ManualBillForm(initial={
+            'cum_value': default_cum,
+            'hsn_code': default_hsn,
+        })
+    return render(request, 'manual_bill.html', {'form': form, 'default_hsn': default_hsn,'default_cum': default_cum})
 
 @staff_member_required
 def manual_bills_list(request):

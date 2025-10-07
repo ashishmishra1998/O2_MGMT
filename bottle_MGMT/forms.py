@@ -58,19 +58,29 @@ class TransactionForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         transaction_type = kwargs.pop('transaction_type', None)
+        transaction = kwargs.get('instance')  # Will be set when editing
         super().__init__(*args, **kwargs)
-        
+
         self.fields['custom_date'].required = False
         self.fields['custom_date'].help_text = "Optional: Leave blank to use current date/time"
-        
-        if transaction_type == 'delivered':
-            self.fields['bottles'].queryset = Bottle.objects.filter(status='in_stock')
-        elif transaction_type == 'returned':
-            # Initially empty; filtered by client via AJAX
-            self.fields['bottles'].queryset = Bottle.objects.none()
-        else:
-            self.fields['bottles'].queryset = Bottle.objects.all()
 
+        # --- Create behavior ---
+        if not transaction:  # Creating new transaction
+            if transaction_type == 'delivered':
+                self.fields['bottles'].queryset = Bottle.objects.filter(status='in_stock')
+            elif transaction_type == 'returned':
+                # Initially empty; filtered by client via AJAX
+                self.fields['bottles'].queryset = Bottle.objects.none()
+            else:
+                self.fields['bottles'].queryset = Bottle.objects.all()
+
+        # --- Edit behavior ---
+        if transaction and transaction.billed:
+            # Lock certain fields if billed
+            locked_fields = ['client', 'bottles', 'transaction_type']
+            for field in locked_fields:
+                self.fields[field].disabled = True
+    
 class TransactionEditForm(forms.ModelForm):
     class Meta:
         model = Transaction
@@ -87,171 +97,97 @@ class BottleCategoryForm(forms.ModelForm):
     class Meta:
         model = BottleCategory
         fields = ['name', 'price']
+        
+        
+# forms.py — replace ManualBillForm with this updated version
 
 class ManualBillForm(forms.Form):
-    """Form for creating manual bills with all required fields"""
-    
-    # Client Information
+    """Form for creating manual bills (multi-row). Row inputs are submitted as arrays from template."""
+    # Client + Bill metadata
     client = forms.ModelChoiceField(
         queryset=Client.objects.filter(role='customer', is_deleted=False),
         label='Client',
         empty_label="Select a Client"
     )
-    
-    # Bill Details
+
     bill_date = forms.DateTimeField(
         label='Bill Date',
-        widget=forms.DateTimeInput(attrs={'type': 'datetime-local', 'class': 'form-control'}),
+        widget=forms.DateTimeInput(
+            attrs={'type': 'datetime-local', 'class': 'form-control'},
+            format='%Y-%m-%dT%H:%M:%S'   # important!
+        ),
         initial=lambda: timezone.now()
     )
-    
-    # Transaction Details (multiple rows)
-    transaction_date = forms.DateField(
-        label='Transaction Date',
-        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'})
-    )
-    
+
+    # Keep gas_type so template can render a select for rows (multiple selects with same name => getlist in view)
     gas_type = forms.ModelChoiceField(
         queryset=BottleCategory.objects.all(),
-        label='Gas Type',
+        label='Gas Type (used to render a select in each row)',
         empty_label="Select Gas Type",
         widget=forms.Select(attrs={'class': 'form-control'})
     )
-    
-    challan_number = forms.IntegerField(
-        label='Challan Number',
-        widget=forms.NumberInput(attrs={'class': 'form-control'})
-    )
-    
-    hsn_code = forms.CharField(
-        label='HSN Code',
-        max_length=20,
-        initial='28044090',
-        widget=forms.TextInput(attrs={'class': 'form-control'})
-    )
-    
-    quantity = forms.IntegerField(
-        label='Quantity',
-        min_value=1,
-        widget=forms.NumberInput(attrs={'class': 'form-control'})
-    )
-    
-    cum_value = forms.DecimalField(
-        label='C.U.M',
-        max_digits=6,
-        decimal_places=2,
-        initial=Decimal('7.00'),
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'})
-    )
-    
-    total_quantity = forms.IntegerField(
-        label='Total Quantity',
-        min_value=1,
-        widget=forms.NumberInput(attrs={'class': 'form-control'})
-    )
-    
-    rate_per_bottle = forms.DecimalField(
-        label='Rate per Bottle',
-        max_digits=10,
-        decimal_places=2,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'})
-    )
-    
-    # Financial Details
-    subtotal_amount = forms.DecimalField(
-        label='Subtotal Amount',
-        max_digits=12,
-        decimal_places=2,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'readonly': 'readonly'})
-    )
-    
+
     discount_percentage = forms.DecimalField(
         label='Discount Percentage',
-        max_digits=5,
-        decimal_places=2,
+        max_digits=5, decimal_places=2,
         initial=Decimal('0.00'),
         widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'})
     )
-    
+
     discount_amount = forms.DecimalField(
         label='Discount Amount',
-        max_digits=12,
-        decimal_places=2,
-        initial=Decimal('0.00'),
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'readonly': 'readonly'})
+        max_digits=12, decimal_places=2,
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'readonly': 'readonly'})
     )
-    
+
     taxable_amount = forms.DecimalField(
         label='Taxable Amount',
-        max_digits=12,
-        decimal_places=2,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'readonly': 'readonly'})
+        max_digits=12, decimal_places=2,
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'readonly': 'readonly'})
     )
-    
+
     gst_percentage = forms.DecimalField(
         label='GST Percentage',
-        max_digits=5,
-        decimal_places=2,
+        max_digits=5, decimal_places=2,
         initial=Decimal('18.00'),
         widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'})
     )
-    
+
     gst_amount = forms.DecimalField(
         label='GST Amount',
-        max_digits=12,
-        decimal_places=2,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'readonly': 'readonly'})
+        max_digits=12, decimal_places=2,
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'readonly': 'readonly'})
     )
-    
+
     final_amount = forms.DecimalField(
         label='Final Amount',
-        max_digits=12,
-        decimal_places=2,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'readonly': 'readonly'})
+        max_digits=12, decimal_places=2,
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'readonly': 'readonly'})
     )
-    
-    # Additional Information
+
     description = forms.CharField(
         label='Description',
         required=False,
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Optional description for the bill'})
     )
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Set initial values
         self.fields['bill_date'].initial = timezone.now()
-        
-        # Customize gas type field to show prices
         self.fields['gas_type'].queryset = BottleCategory.objects.all()
         self.fields['gas_type'].label_from_instance = lambda obj: f"{obj.name} (Rs. {obj.price})" if obj.price else obj.name
-        
+
     def clean(self):
-        cleaned_data = super().clean()
-        
-        # Validate that total_quantity >= quantity
-        quantity = cleaned_data.get('quantity')
-        total_quantity = cleaned_data.get('total_quantity')
-        if quantity and total_quantity and total_quantity < quantity:
-            raise forms.ValidationError('Total quantity must be greater than or equal to quantity.')
-        
-        # Auto-calculate amounts
-        quantity = cleaned_data.get('quantity', 0)
-        rate = cleaned_data.get('rate_per_bottle', 0)
-        discount_pct = cleaned_data.get('discount_percentage', 0)
-        gst_pct = cleaned_data.get('gst_percentage', 18)
-        
-        if quantity and rate:
-            subtotal = quantity * rate
-            discount_amount = (subtotal * discount_pct / 100).quantize(Decimal('0.01'))
-            taxable_amount = subtotal - discount_amount
-            gst_amount = (taxable_amount * gst_pct / 100).quantize(Decimal('0.01'))
-            final_amount = taxable_amount + gst_amount
-            
-            cleaned_data['subtotal_amount'] = subtotal
-            cleaned_data['discount_amount'] = discount_amount
-            cleaned_data['taxable_amount'] = taxable_amount
-            cleaned_data['gst_amount'] = gst_amount
-            cleaned_data['final_amount'] = final_amount
-        
-        return cleaned_data 
+        cleaned = super().clean()
+        # Basic validation only — row-level validations happen in the view (since rows arrive as arrays)
+        discount_pct = cleaned.get('discount_percentage')
+        gst_pct = cleaned.get('gst_percentage')
+        if discount_pct is None:
+            cleaned['discount_percentage'] = Decimal('0.00')
+        if gst_pct is None:
+            cleaned['gst_percentage'] = Decimal('18.00')
+        return cleaned
