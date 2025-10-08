@@ -17,7 +17,7 @@
     {% if admin_client.owner_gst %}
       <p class="mb-0">GST No: {{ admin_client.owner_gst }}</p>
     {% endif %}
-    {% if admin_client.license_number %}<p class="mb-0"><small>License No: {{ admin_client.license_number }}</small></p>{% endif %}
+    <!-- {% if admin_client.license_number %}<p class="mb-0"><small>License No: {{ admin_client.license_number }}</small></p>{% endif %} -->
     {% if admin_client.jurisdiction %}
       <p class="mb-0">{{ admin_client.jurisdiction }}</p>
     {% endif %}
@@ -121,9 +121,13 @@
       </tr>
       {% endif %}
 
-      <!-- Grand Total -->
+      <!-- Totals row for QTY columns and Grand Total amount -->
       <tr class="table-success">
-        <td colspan="8" class="text-end"><strong>Grand Total</strong></td>
+        <td colspan="4" class="text-end"><strong></strong></td>
+        <td><strong>{{ qty_sum }}</strong></td>
+        <td></td>
+        <td><strong>{{ total_qty_sum }}</strong></td>
+        <td class="text-end"><strong>Grand Total</strong></td>
         <td><strong>₹{{ bill.final_amount }}</strong></td>
       </tr>
     </tbody>

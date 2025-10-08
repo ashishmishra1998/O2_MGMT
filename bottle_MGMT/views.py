@@ -794,6 +794,13 @@ def create_custom_bill(request, client_id):
         'admin_client': Client.objects.filter(role='admin').first(),
         'amount_in_words': number_to_words(bill.final_amount),
     }
+    # Compute QTY totals for display in the invoice table
+    try:
+        context['qty_sum'] = sum((r.get('qty') or 0) for r in transaction_rows)
+        context['total_qty_sum'] = sum((r.get('total_qty') or 0) for r in transaction_rows)
+    except Exception:
+        context['qty_sum'] = 0
+        context['total_qty_sum'] = 0
     if request.GET.get('format') == 'pdf':
         return generate_pdf_bill(request, context)
     return render(request, 'generate_bill.html', context)
@@ -837,6 +844,13 @@ def generate_bill(request, client_id, bill_id=None):
                 bt = next(bt for bt in bts if bt.transaction_id == row['txn'].id)
                 # Use transaction's challan_number if available, otherwise use BillTransaction's challan_number
                 row['challan_no'] = row['txn'].challan_number if row['txn'].challan_number else bt.challan_number
+            # Compute qty sums for existing bill path too
+            try:
+                qty_sum = sum((r.get('qty') or 0) for r in transaction_rows)
+                total_qty_sum = sum((r.get('total_qty') or 0) for r in transaction_rows)
+            except Exception:
+                qty_sum = 0
+                total_qty_sum = 0
         # Compute totals based on actual subtotal (if bill already has fields, keep them consistent)
         # Use bill fields if present; otherwise compute from subtotal
         if getattr(bill, 'subtotal_amount', None):
@@ -1056,10 +1070,7 @@ def generate_pdf_bill(request, context):
     elements.append(Paragraph(contact_line, styles["CompanyHeader"]))
     if company_gst:
         elements.append(Paragraph(f"GST No: {company_gst}", styles["CompanyHeader"]))
-    # Add license number if available
-    admin_license = getattr(admin, "license_number", None) or (admin.get("license_number") if isinstance(admin, dict) else None) or ""
-    # Debug: Always add license number for testing
-    elements.append(Paragraph(f"License No: {admin_license or 'NOT_SET'}", styles["CompanyHeader"]))
+    # License number intentionally omitted from PDF as requested
     elements.append(Spacer(1, 12))
 
     # --- Invoice title & bill metadata (center/right) ---
@@ -1149,6 +1160,13 @@ def generate_pdf_bill(request, context):
         ])
 
     # Totals rows exactly as in template
+    # Compute qty totals
+    try:
+        qty_sum_pdf = sum((r.get("qty") or 0) for r in tx_rows)
+        total_qty_sum_pdf = sum((r.get("total_qty") or 0) for r in tx_rows)
+    except Exception:
+        qty_sum_pdf = 0
+        total_qty_sum_pdf = 0
     subtotal_val = safe_decimal(getattr(bill, "subtotal_amount", context.get("subtotal") or 0))
     table_data.append(["", "", "", "", "", "", "", "Subtotal", f"Rs. {subtotal_val:.2f}"])
 
@@ -1172,7 +1190,8 @@ def generate_pdf_bill(request, context):
         table_data.append(["", "", "", "", "", "", "", f"SGST ({sgst_pct:.2f}%)", f"Rs. {sgst_amt:.2f}"])
 
     grand_total = safe_decimal(getattr(bill, "final_amount", None) or context.get("final") or (taxable_val + gst_amt))
-    table_data.append(["", "", "", "", "", "", "", "Grand Total", f"Rs. {grand_total:.2f}"])
+    # Combined totals + grand total row (to mirror HTML)
+    table_data.append(["", "", "", "", str(qty_sum_pdf), "", str(total_qty_sum_pdf), "Grand Total", f"Rs. {grand_total:.2f}"])
 
     # Build table — align numeric columns to right (Rate & Amount columns)
     col_count = len(table_data[0])
