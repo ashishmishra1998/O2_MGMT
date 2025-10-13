@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Export Transactions to Excel{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-file-excel"></i> Export Transactions to Excel
+                    </h3>
+                    <p class="card-subtitle text-muted">
+                        Export transaction data with bottle details for tracking and cross-checking
+                    </p>
+                </div>
+                <div class="card-body">
+                    <form method="get" id="exportForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="start_date" class="form-label">
+                                        <i class="fas fa-calendar-alt"></i> Start Date
+                                    </label>
+                                    <input type="date" class="form-control" id="start_date" name="start_date" required>
+                                    <div class="form-text">Select the start date for the export range</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="end_date" class="form-label">
+                                        <i class="fas fa-calendar-alt"></i> End Date
+                                    </label>
+                                    <input type="date" class="form-control" id="end_date" name="end_date" required>
+                                    <div class="form-text">Select the end date for the export range</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="transaction_type" class="form-label">
+                                        <i class="fas fa-exchange-alt"></i> Transaction Type
+                                    </label>
+                                    <select class="form-select" id="transaction_type" name="transaction_type">
+                                        <option value="">All Transactions</option>
+                                        <option value="delivered">Delivered Only</option>
+                                        <option value="returned">Returned Only</option>
+                                    </select>
+                                    <div class="form-text">Choose to export delivered, returned, or both types</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="client_id" class="form-label">
+                                        <i class="fas fa-user"></i> Client (Optional)
+                                    </label>
+                                    <select class="form-select" id="client_id" name="client_id">
+                                        <option value="">All Clients</option>
+                                        {% for client in clients %}
+                                            <option value="{{ client.id }}">{{ client.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="form-text">Filter by specific client (optional)</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="alert alert-info">
+                                    <h6><i class="fas fa-info-circle"></i> Export Information</h6>
+                                    <p class="mb-0">
+                                        The Excel file will contain the following columns:
+                                        <strong>Transaction ID, Date, Time, Client Name, Client Contact, 
+                                        Transaction Type, Challan Number, Delivered By, Bottle Code, 
+                                        Bottle Category, Bottle Status</strong>
+                                    </p>
+                                    <p class="mb-0 mt-2">
+                                        <strong>Note:</strong> Each bottle will be listed in a separate row, 
+                                        making it easy to track individual bottle movements.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-success btn-lg">
+                                    <i class="fas fa-file-excel"></i> Export to Excel
+                                </button>
+                                <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary btn-lg ms-2">
+                                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                                </a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default date range (last 30 days)
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    
+    document.getElementById('start_date').value = thirtyDaysAgo.toISOString().split('T')[0];
+    document.getElementById('end_date').value = today.toISOString().split('T')[0];
+    
+    // Form validation
+    document.getElementById('exportForm').addEventListener('submit', function(e) {
+        const startDate = document.getElementById('start_date').value;
+        const endDate = document.getElementById('end_date').value;
+        
+        if (!startDate || !endDate) {
+            e.preventDefault();
+            alert('Please select both start and end dates.');
+            return;
+        }
+        
+        if (new Date(startDate) > new Date(endDate)) {
+            e.preventDefault();
+            alert('Start date cannot be after end date.');
+            return;
+        }
+        
+        // Show loading state
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating Excel...';
+        submitBtn.disabled = true;
+        
+        // Re-enable button after 5 seconds (in case of error)
+        setTimeout(() => {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }, 5000);
+    });
+});
+</script>
+{% endblock %}

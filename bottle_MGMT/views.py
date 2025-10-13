@@ -32,6 +32,10 @@ from django.db import transaction as db_transaction
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from django.http import JsonResponse
 from django.core.paginator import Paginator
+from django.http import HttpResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill
+from datetime import datetime
 
 
 @staff_member_required
@@ -134,7 +138,12 @@ def login_view(request):
             return render(request, 'login.html', {'error': 'Invalid credentials'})
     return render(request, 'login.html')
 
+@login_required
 def admin_dashboard(request):
+    # Ensure only staff users can access this dashboard
+    if not request.user.is_staff:
+        return redirect('delivery_dashboard')
+    
     total_bottles = Bottle.objects.count()
     in_stock = Bottle.objects.filter(status='in_stock').count()
     delivered = Bottle.objects.filter(status='delivered').count()
@@ -163,27 +172,16 @@ def admin_dashboard(request):
 
 
 
+@login_required
 def delivery_dashboard(request):
-    # Bottles delivered by this user
-    delivered = sum(
-        t.bottles.count()
-        for t in Transaction.objects.filter(delivered_by=request.user, transaction_type='delivered')
-    )
-
-    # Bottles returned (transactions created as 'returned')
-    returned = sum(
-        t.bottles.count()
-        for t in Transaction.objects.filter(delivered_by=request.user, transaction_type='returned')
-    )
-
-    pending = delivered - returned  # Bottles still with clients
-
-    recent_transactions = Transaction.objects.filter(delivered_by=request.user).order_by('-date')[:5]
+    # Ensure only delivery users can access this dashboard
+    if request.user.is_staff:
+        return redirect('admin_dashboard')
+    
+    # Get all transactions for this delivery boy (not just recent 5)
+    recent_transactions = Transaction.objects.filter(delivered_by=request.user).order_by('-date')
 
     return render(request, 'delivery_dashboard.html', {
-        'delivered': delivered,
-        'returned': returned,
-        'pending': pending,
         'recent_transactions': recent_transactions,
     })
 
@@ -381,6 +379,26 @@ def transaction_list(request):
         print("Filtering by client:", client_id)  # Debug print
         transactions = transactions.filter(client_id=client_id)
 
+    # Date range filtering
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    if start_date:
+        try:
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            transactions = transactions.filter(
+                Q(date__date__gte=start_date_obj) | Q(custom_date__date__gte=start_date_obj)
+            )
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            transactions = transactions.filter(
+                Q(date__date__lte=end_date_obj) | Q(custom_date__date__lte=end_date_obj)
+            )
+        except ValueError:
+            pass
+
     transaction_type = request.GET.get('type')
     if transaction_type:
         if transaction_type == 'challan_asc':
@@ -405,6 +423,8 @@ def transaction_list(request):
         'clients': Client.objects.all(),
         'selected_client': client_id,
         'selected_type': transaction_type,
+        'selected_start_date': start_date,
+        'selected_end_date': end_date,
         'page_obj': page_obj,  # useful for pagination controls
     })
 
@@ -462,6 +482,121 @@ def transaction_delete(request, pk):
         messages.success(request, 'Transaction deleted successfully.')
         return redirect('transaction_list')
     return render(request, 'delete_bill.html', { 'bill': None })
+
+@login_required
+def transaction_print(request, pk):
+    """Print view for individual transaction - uses same PDF format as admin bills"""
+    transaction = get_object_or_404(Transaction, pk=pk)
+    
+    # Only allow delivery boys to print their own transactions
+    if request.user.username == 'delivery' and transaction.delivered_by != request.user:
+        return HttpResponseForbidden('You can only print your own transactions.')
+    
+    # Get admin client info
+    admin_client = Client.objects.filter(role='admin').first()
+    
+    # Create a mock bill object for the transaction
+    class MockBill:
+        def __init__(self, transaction, calculated_amount=Decimal('0.00')):
+            self.id = transaction.id  # Use same format as admin bills
+            self.bill_date = transaction.custom_date or transaction.date
+            self.subtotal_amount = calculated_amount
+            self.discount_amount = Decimal('0.00')
+            self.discount_percentage = 0
+            self.taxable_amount = calculated_amount
+            self.gst_amount = Decimal('0.00')
+            self.gst_percentage = 0
+            self.final_amount = calculated_amount
+            self.delivered_bottles = transaction.bottles.count()
+    
+    # Create transaction rows in the same format as admin bills
+    transaction_rows = []
+    bottles = transaction.bottles.all()
+    
+    # Group bottles by category for better display
+    from collections import defaultdict
+    bottles_by_category = defaultdict(list)
+    for bottle in bottles:
+        bottles_by_category[bottle.category.name].append(bottle)
+    
+    for category_name, category_bottles in bottles_by_category.items():
+        # Get pricing for this category from BottleCategory
+        try:
+            category = category_bottles[0].category
+            rate = category.price or Decimal('0.00')
+        except (AttributeError, IndexError):
+            rate = Decimal('0.00')
+        
+        # Create a row for this category
+        row = {
+            'date': transaction.custom_date or transaction.date,
+            'gas': category_name,
+            'challan_no': transaction.challan_number or '',
+            'hsn': '28044000',  # Standard HSN for oxygen
+            'qty': len(category_bottles),
+            'cum': len(category_bottles),
+            'total_qty': len(category_bottles),
+            'rate': rate,
+            'amount': rate * len(category_bottles)
+        }
+        transaction_rows.append(row)
+    
+    # Calculate total amount from transaction rows
+    calculated_amount = sum(row['amount'] for row in transaction_rows)
+    
+    # Create mock bill with calculated amount
+    bill = MockBill(transaction, calculated_amount)
+    
+    # Calculate totals using the same logic as admin bills
+    # Use default GST percentage of 18% (same as admin bills)
+    gst_percentage = Decimal('18.00')
+    discount_percentage = Decimal('0.00')  # No discount for individual transactions
+    
+    # Import the utility function for GST calculation
+    from bottle_MGMT.utils import compute_totals_from_subtotal
+    totals = compute_totals_from_subtotal(
+        subtotal=calculated_amount,
+        discount_pct=discount_percentage,
+        gst_pct=gst_percentage
+    )
+    
+    # Calculate CGST and SGST (split GST equally)
+    cgst_amount = (totals['gst_amount'] / Decimal('2')).quantize(Decimal('0.01'))
+    sgst_amount = cgst_amount
+    cgst_percentage = (gst_percentage / Decimal('2')).quantize(Decimal('0.01'))
+    sgst_percentage = cgst_percentage
+    
+    # Update bill with calculated amounts
+    bill.subtotal_amount = totals['subtotal']
+    bill.discount_amount = totals['discount_amount']
+    bill.discount_percentage = totals['discount_pct']
+    bill.taxable_amount = totals['taxable']
+    bill.gst_amount = totals['gst_amount']
+    bill.gst_percentage = totals['gst_pct']
+    bill.final_amount = totals['final']
+    
+    context = {
+        'client': transaction.client,
+        'bill': bill,
+        'transaction_rows': transaction_rows,
+        'cgst_amount': cgst_amount,
+        'sgst_amount': sgst_amount,
+        'cgst_percentage': cgst_percentage,
+        'sgst_percentage': sgst_percentage,
+        'admin_client': admin_client,
+        'amount_in_words': number_to_words(bill.final_amount),
+        'transaction': transaction,  # Keep original transaction for reference
+        'bottles': bottles,  # Keep bottles for reference
+        'qty_sum': sum(row['qty'] for row in transaction_rows),
+        'total_qty_sum': sum(row['total_qty'] for row in transaction_rows),
+    }
+    
+    # Check if PDF format is requested
+    if request.GET.get('format') == 'pdf':
+        return generate_pdf_bill(request, context)
+    
+    # Use the same template as admin bills for consistency
+    return render(request, 'bill_pdf.html', context)
 
     
 @staff_member_required
@@ -1824,3 +1959,254 @@ def manual_bills_list(request):
         'manual_bills': page_obj,
         'page_obj': page_obj,
     })
+
+
+@staff_member_required
+def export_transactions(request):
+    """Export transactions to Excel with filtering options"""
+    if request.method == 'GET':
+        # Get filter parameters
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        transaction_type = request.GET.get('transaction_type', '')
+        client_id = request.GET.get('client_id', '')
+        
+        # If no parameters provided, show the form
+        if not any([start_date, end_date, transaction_type, client_id]):
+            clients = Client.objects.filter(is_deleted=False).order_by('name')
+            return render(request, 'export_transactions.html', {
+                'clients': clients
+            })
+        
+        # Filter transactions based on parameters
+        transactions = Transaction.objects.select_related('client', 'delivered_by').prefetch_related('bottles')
+        
+        # Apply date filters
+        if start_date:
+            transactions = transactions.filter(date__gte=start_date)
+        if end_date:
+            # Add one day to end_date to include the entire day
+            from datetime import timedelta
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            transactions = transactions.filter(date__lt=end_date_obj + timedelta(days=1))
+        
+        # Apply transaction type filter
+        if transaction_type:
+            transactions = transactions.filter(transaction_type=transaction_type)
+        
+        # Apply client filter
+        if client_id:
+            transactions = transactions.filter(client_id=client_id)
+        
+        # Order by date
+        transactions = transactions.order_by('date')
+        
+        # Create Excel workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Transactions Export"
+        
+        # Define headers
+        headers = [
+            'Transaction ID', 'Date', 'Time', 'Client Name', 'Client Contact', 
+            'Transaction Type', 'Challan Number', 'Delivered By', 'Bottle Code', 
+            'Bottle Category', 'Bottle Status'
+        ]
+        
+        # Style headers
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Write headers
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+        
+        # Write data
+        row_num = 2
+        for transaction in transactions:
+            # Get all bottles for this transaction
+            bottles = transaction.bottles.all()
+            
+            if bottles.exists():
+                # Create a row for each bottle
+                for bottle in bottles:
+                    ws.cell(row=row_num, column=1, value=transaction.id)
+                    ws.cell(row=row_num, column=2, value=transaction.date.strftime('%Y-%m-%d'))
+                    ws.cell(row=row_num, column=3, value=transaction.date.strftime('%H:%M:%S'))
+                    ws.cell(row=row_num, column=4, value=transaction.client.name)
+                    ws.cell(row=row_num, column=5, value=transaction.client.contact)
+                    ws.cell(row=row_num, column=6, value=transaction.get_transaction_type_display())
+                    ws.cell(row=row_num, column=7, value=transaction.challan_number or '')
+                    ws.cell(row=row_num, column=8, value=transaction.delivered_by.username if transaction.delivered_by else '')
+                    ws.cell(row=row_num, column=9, value=bottle.code)
+                    ws.cell(row=row_num, column=10, value=bottle.category.name)
+                    ws.cell(row=row_num, column=11, value=bottle.get_status_display())
+                    row_num += 1
+            else:
+                # If no bottles, still show transaction info
+                ws.cell(row=row_num, column=1, value=transaction.id)
+                ws.cell(row=row_num, column=2, value=transaction.date.strftime('%Y-%m-%d'))
+                ws.cell(row=row_num, column=3, value=transaction.date.strftime('%H:%M:%S'))
+                ws.cell(row=row_num, column=4, value=transaction.client.name)
+                ws.cell(row=row_num, column=5, value=transaction.client.contact)
+                ws.cell(row=row_num, column=6, value=transaction.get_transaction_type_display())
+                ws.cell(row=row_num, column=7, value=transaction.challan_number or '')
+                ws.cell(row=row_num, column=8, value=transaction.delivered_by.username if transaction.delivered_by else '')
+                ws.cell(row=row_num, column=9, value='No bottles')
+                ws.cell(row=row_num, column=10, value='')
+                ws.cell(row=row_num, column=11, value='')
+                row_num += 1
+        
+        # Auto-adjust column widths
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Add current bottles summary section
+        summary_start_row = row_num + 2
+        
+        # Add separator
+        ws.cell(row=summary_start_row, column=1, value="=" * 100)
+        for col in range(2, 12):
+            ws.cell(row=summary_start_row, column=col, value="=" * 20)
+        
+        # Add summary title
+        summary_title_row = summary_start_row + 1
+        ws.cell(row=summary_title_row, column=1, value="CURRENT BOTTLES WITH CLIENTS SUMMARY")
+        ws.merge_cells(f'A{summary_title_row}:K{summary_title_row}')
+        title_cell = ws.cell(row=summary_title_row, column=1)
+        title_cell.font = Font(bold=True, size=14, color="FFFFFF")
+        title_cell.fill = PatternFill(start_color="2E8B57", end_color="2E8B57", fill_type="solid")
+        title_cell.alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Get current bottles with clients
+        current_bottles = Bottle.objects.filter(
+            status='delivered'
+        ).select_related('category').order_by('code')
+        
+        # Group bottles by client (find client through latest delivered transaction)
+        from collections import defaultdict
+        client_bottles = defaultdict(list)
+        for bottle in current_bottles:
+            # Find the latest delivered transaction for this bottle to get the current client
+            latest_delivered_txn = (
+                Transaction.objects.filter(bottles=bottle, transaction_type='delivered')
+                .select_related('client')
+                .order_by('-date')
+                .first()
+            )
+            if latest_delivered_txn:
+                client_bottles[latest_delivered_txn.client].append(bottle)
+        
+        # Add summary headers
+        summary_header_row = summary_title_row + 2
+        summary_headers = [
+            'Client Name', 'Client Contact', 'Total Bottles', 'Bottle Codes', 
+            'Categories', 'Last Delivery Date', 'Days Since Delivery'
+        ]
+        
+        for col, header in enumerate(summary_headers, 1):
+            cell = ws.cell(row=summary_header_row, column=col, value=header)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Add client summary data
+        current_row = summary_header_row + 1
+        for client, bottles in client_bottles.items():
+            # Get last delivery date for this client
+            last_delivery = Transaction.objects.filter(
+                client=client,
+                transaction_type='delivered',
+                bottles__in=bottles
+            ).order_by('-date').first()
+            
+            last_delivery_date = last_delivery.date if last_delivery else None
+            days_since_delivery = ""
+            if last_delivery_date:
+                from datetime import date
+                days_since = (date.today() - last_delivery_date.date()).days
+                days_since_delivery = f"{days_since} days"
+            
+            # Get unique categories
+            categories = list(set(bottle.category.name for bottle in bottles))
+            categories_str = ", ".join(categories)
+            
+            # Get bottle codes (limit to first 10 for readability)
+            bottle_codes = [bottle.code for bottle in bottles[:10]]
+            bottle_codes_str = ", ".join(bottle_codes)
+            if len(bottles) > 10:
+                bottle_codes_str += f" ... (+{len(bottles) - 10} more)"
+            
+            # Write client summary row
+            ws.cell(row=current_row, column=1, value=client.name)
+            ws.cell(row=current_row, column=2, value=client.contact)
+            ws.cell(row=current_row, column=3, value=len(bottles))
+            ws.cell(row=current_row, column=4, value=bottle_codes_str)
+            ws.cell(row=current_row, column=5, value=categories_str)
+            ws.cell(row=current_row, column=6, value=last_delivery_date.strftime('%Y-%m-%d') if last_delivery_date else 'N/A')
+            ws.cell(row=current_row, column=7, value=days_since_delivery)
+            
+            current_row += 1
+        
+        # Add summary footer
+        footer_row = current_row + 1
+        ws.cell(row=footer_row, column=1, value=f"Total Clients with Bottles: {len(client_bottles)}")
+        ws.cell(row=footer_row, column=3, value=f"Total Bottles Out: {sum(len(bottles) for bottles in client_bottles.values())}")
+        
+        # Style summary footer
+        footer_cell = ws.cell(row=footer_row, column=1)
+        footer_cell.font = Font(bold=True)
+        footer_cell.fill = PatternFill(start_color="E6E6FA", end_color="E6E6FA", fill_type="solid")
+        
+        # Auto-adjust summary column widths
+        for col in range(1, 8):
+            max_length = 0
+            column_letter = ws.cell(row=summary_header_row, column=col).column_letter
+            for row in range(summary_header_row, current_row):
+                try:
+                    cell_value = ws.cell(row=row, column=col).value
+                    if cell_value and len(str(cell_value)) > max_length:
+                        max_length = len(str(cell_value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Create HTTP response
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+        # Generate filename with date range and filters
+        filename_parts = ['transactions_export']
+        if start_date:
+            filename_parts.append(f"from_{start_date}")
+        if end_date:
+            filename_parts.append(f"to_{end_date}")
+        if transaction_type:
+            filename_parts.append(transaction_type)
+        if client_id:
+            client = Client.objects.get(id=client_id)
+            filename_parts.append(f"client_{client.name.replace(' ', '_')}")
+        
+        filename = '_'.join(filename_parts) + '.xlsx'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        # Save workbook to response
+        wb.save(response)
+        return response
+    
+    return HttpResponse("Invalid request method", status=405)

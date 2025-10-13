@@ -4,41 +4,24 @@
 
 {% block content %}
     <h2>Delivery Boy Dashboard</h2>
-    <div class="row text-center mb-4">
-        <div class="col-md-4 col-6">
-            <div class="card bg-success text-white mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">Delivered</h5>
-                    <p class="card-text display-6">{{ delivered }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 col-6">
-            <div class="card bg-info text-white mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">Returned</h5>
-                    <p class="card-text display-6">{{ returned }}</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4 col-6">
-            <div class="card bg-danger text-white mb-3">
-                <div class="card-body">
-                    <h5 class="card-title">Pending Return</h5>
-                    <p class="card-text display-6">{{ pending }}</p>
-                </div>
-            </div>
-        </div>
+    
+    <!-- Action Buttons -->
+    <div class="d-flex gap-2 mb-4">
+        <a href="{% url 'transaction_create' %}?transaction_type=delivered" class="btn btn-success">Deliver Bottle</a>
+        <a href="{% url 'transaction_create' %}?transaction_type=returned" class="btn btn-info">Return Bottle</a>
     </div>
-    <h4>My Recent Transactions</h4>
+
+    <!-- Transaction List -->
+    <h4>My Transactions</h4>
     <table class="table table-bordered table-striped">
         <thead>
             <tr>
                 <th>Date</th>
                 <th>Client</th>
-                <th>Bottle</th>
+                <th>Bottles</th>
                 <th>Type</th>
-                <th>Photo</th>
+                <th>Challan No.</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -52,21 +35,107 @@
                 {% endif %}
                 </td>                
                 <td>{{ t.client.name }}</td>
-                <td>{{ t.bottle.code }}</td>
-                <td>{{ t.get_transaction_type_display }}</td>
                 <td>
-                    {% if t.photo %}
-                        <img src="{{ t.photo.url }}" alt="Bottle Photo" style="max-width:60px; max-height:60px;">
-                    {% else %}
-                        No photo
-                    {% endif %}
+                    {% with t.bottles.count as bottle_count %}
+                    <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#bottlesModal{{ t.id }}">
+                        Show {{ bottle_count }} Bottle{% if bottle_count != 1 %}s{% endif %}
+                    </button>
+                    {% endwith %}
+                    {% include 'partials/transaction_bottle_modal.html' with transaction=t %}
+                </td>
+                <td>{{ t.get_transaction_type_display }}</td>
+                <td>{{ t.challan_number|default:"-" }}</td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="printTransaction('{{ t.id }}')">Print</button>
                 </td>
             </tr>
             {% empty %}
             <tr>
-                <td colspan="5" class="text-center">No recent transactions.</td>
+                <td colspan="6" class="text-center">No transactions found.</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+
+    <!-- Print Modal -->
+    <div class="modal fade" id="printModal" tabindex="-1" aria-labelledby="printModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="printModalLabel">Transaction Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="printContent">
+                    <!-- Transaction details will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="printPDF()">Print PDF</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function printTransaction(transactionId) {
+            // Load transaction details for printing
+            fetch(`/transactions/${transactionId}/print/`)
+                .then(response => response.text())
+                .then(html => {
+                    // Add transaction ID to the content for the print function to find
+                    var contentDiv = document.createElement('div');
+                    contentDiv.innerHTML = html;
+                    contentDiv.setAttribute('data-transaction-id', transactionId);
+                    document.getElementById('printContent').innerHTML = contentDiv.outerHTML;
+                    var printModal = new bootstrap.Modal(document.getElementById('printModal'));
+                    printModal.show();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error loading transaction details');
+                });
+        }
+
+        function printPDF() {
+            // Get the transaction ID from the current modal content
+            var printContent = document.getElementById('printContent');
+            var transactionId = printContent.querySelector('[data-transaction-id]')?.getAttribute('data-transaction-id');
+            
+            if (transactionId) {
+                // Open the transaction print page in a new window for printing
+                var printWindow = window.open(`/transactions/${transactionId}/print/`, '_blank');
+                printWindow.onload = function() {
+                    printWindow.print();
+                };
+            } else {
+                // Fallback to the old method if no transaction ID found
+                var printWindow = window.open('', '_blank');
+                var printContent = document.getElementById('printContent').innerHTML;
+                
+                printWindow.document.write(`
+                    <html>
+                        <head>
+                            <title>Transaction Print</title>
+                            <style>
+                                body { font-family: Arial, sans-serif; margin: 20px; }
+                                table { width: 100%; border-collapse: collapse; }
+                                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                                th { background-color: #f2f2f2; }
+                                .header { text-align: center; margin-bottom: 20px; }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="header">
+                                <h2>Transaction Details</h2>
+                            </div>
+                            ${printContent}
+                        </body>
+                    </html>
+                `);
+                
+                printWindow.document.close();
+                printWindow.print();
+            }
+        }
+    </script>
 {% endblock %}

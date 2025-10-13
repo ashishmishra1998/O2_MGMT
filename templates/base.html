@@ -31,9 +31,11 @@
                     </li>
                 {% endif %}
 
+                {% if request.user.is_staff %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.resolver_match.url_name == 'client_list' %}active{% endif %}" href="{% url 'client_list' %}">Clients</a>
                 </li>
+                {% endif %}
 
                 <li class="nav-item">
                     <a class="nav-link {% if request.resolver_match.url_name == 'transaction_list' %}active{% endif %}" href="{% url 'transaction_list' %}">Transactions</a>
@@ -61,6 +63,8 @@
                      <ul class="dropdown-menu">
                          <li><a class="dropdown-item" href="{% url 'sales_analytics' %}">Sales Analytics</a></li>
                          <li><a class="dropdown-item" href="{% url 'reports' %}">Reports</a></li>
+                         <li><hr class="dropdown-divider"></li>
+                         <li><a class="dropdown-item" href="{% url 'export_transactions' %}"><i class="fas fa-file-excel"></i> Export Transactions</a></li>
                          <li><hr class="dropdown-divider"></li>
                          <li><a class="dropdown-item" href="{% url 'manual_bill_create' %}">Create Manual Bill</a></li>
                          <li><a class="dropdown-item" href="{% url 'manual_bills_list' %}">Manual Bills</a></li>

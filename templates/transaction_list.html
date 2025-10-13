@@ -13,7 +13,7 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="col-auto">  
+        <div class="col-auto">
             <select name="type" class="form-select">
                 <option value="">All Types</option>
                 <option value="delivered" {% if selected_type == 'delivered' %}selected{% endif %}>Delivered</option>
@@ -22,6 +22,12 @@
                 <option value="date_asc" {% if selected_type == 'date_asc' %}selected{% endif %}>Date (Asc)</option>
                 <option value="date_desc" {% if selected_type == 'date_desc' %}selected{% endif %}>Date (Desc)</option>
             </select>
+        </div>
+        <div class="col-auto">
+            <input type="date" name="start_date" class="form-control" placeholder="Start Date" value="{{ selected_start_date }}">
+        </div>
+        <div class="col-auto">
+            <input type="date" name="end_date" class="form-control" placeholder="End Date" value="{{ selected_end_date }}">
         </div>
         <div class="col-auto">
             <button type="submit" class="btn btn-primary">Filter</button>
@@ -101,17 +107,17 @@
     {# First + Prev #}
     {% if page_obj.has_previous %}
       <li class="page-item">
-        <a class="page-link" href="?page=1{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">« First</a>
+        <a class="page-link" href="?page=1{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_start_date %}&start_date={{ selected_start_date }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date }}{% endif %}">« First</a>
       </li>
       <li class="page-item">
-        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">‹ Prev</a>
+        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_start_date %}&start_date={{ selected_start_date }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date }}{% endif %}">‹ Prev</a>
       </li>
     {% endif %}
 
     {# Always show first page #}
     {% if page_obj.number > 3 %}
       <li class="page-item">
-        <a class="page-link" href="?page=1{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">1</a>
+        <a class="page-link" href="?page=1{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_start_date %}&start_date={{ selected_start_date }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date }}{% endif %}">1</a>
       </li>
       {% if page_obj.number > 4 %}
         <li class="page-item disabled"><span class="page-link">…</span></li>
@@ -125,7 +131,7 @@
           <li class="page-item active"><span class="page-link">{{ num }}</span></li>
         {% else %}
           <li class="page-item">
-            <a class="page-link" href="?page={{ num }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">{{ num }}</a>
+            <a class="page-link" href="?page={{ num }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_start_date %}&start_date={{ selected_start_date }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date }}{% endif %}">{{ num }}</a>
           </li>
         {% endif %}
       {% endif %}
@@ -137,17 +143,17 @@
         <li class="page-item disabled"><span class="page-link">…</span></li>
       {% endif %}
       <li class="page-item">
-        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">{{ page_obj.paginator.num_pages }}</a>
+        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_start_date %}&start_date={{ selected_start_date }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date }}{% endif %}">{{ page_obj.paginator.num_pages }}</a>
       </li>
     {% endif %}
 
     {# Next + Last #}
     {% if page_obj.has_next %}
       <li class="page-item">
-        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">Next ›</a>
+        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_start_date %}&start_date={{ selected_start_date }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date }}{% endif %}">Next ›</a>
       </li>
       <li class="page-item">
-        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}">Last »</a>
+        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if selected_client %}&client={{ selected_client }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_start_date %}&start_date={{ selected_start_date }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date }}{% endif %}">Last »</a>
       </li>
     {% endif %}
 

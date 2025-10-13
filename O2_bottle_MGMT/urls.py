@@ -33,6 +33,7 @@ urlpatterns = [
     path('transactions/create/', views.transaction_create, name='transaction_create'),
     path('transactions/<int:pk>/edit/', views.transaction_edit, name='transaction_edit'),
     path('transactions/<int:pk>/delete/', views.transaction_delete, name='transaction_delete'),
+    path('transactions/<int:pk>/print/', views.transaction_print, name='transaction_print'),
     path('ajax/get-client-bottles/', views.get_client_bottles, name='get_client_bottles'),
     path('reports/', views.reports_view, name='reports'),
     path('inventory/', views.inventory_view, name='inventory'),
@@ -56,6 +57,7 @@ urlpatterns = [
     path('manual-bill/', views.manual_bill_create, name='manual_bill_create'),
     path('manual-bills/', views.manual_bills_list, name='manual_bills_list'),
     path('bottle-status/', views.bottle_status, name='bottle_status'),
+    path('export-transactions/', views.export_transactions, name='export_transactions'),
 ]
 
 # Serve media files in development

@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Bill - {{ client.name }}</title>
+    <title>{% if transaction %}Transaction Print - {{ transaction.id }}{% else %}Bill - {{ client.name }}{% endif %}</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -45,58 +45,224 @@
             font-size: 12px;
             color: #666;
         }
+        .text-center { text-align: center; }
+        .text-end { text-align: right; }
+        .mb-0 { margin-bottom: 0; }
+        .mb-1 { margin-bottom: 0.25rem; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mb-3 { margin-bottom: 1rem; }
+        .mb-4 { margin-bottom: 1.5rem; }
+        .mt-3 { margin-top: 1rem; }
+        .mt-4 { margin-top: 1.5rem; }
+        .mt-5 { margin-top: 3rem; }
+        .fw-bold { font-weight: bold; }
+        .small { font-size: 0.875rem; }
+        .text-muted { color: #6c757d; }
+        .table-light { background-color: #f8f9fa; }
+        .table-success { background-color: #d1e7dd; }
+        .row { display: flex; }
+        .col-6 { flex: 0 0 50%; }
+        .col-md-6 { flex: 0 0 50%; }
+        .d-flex { display: flex; }
+        .justify-content-between { justify-content: space-between; }
+        .align-items-center { align-items: center; }
+        .img-thumbnail { border: 1px solid #dee2e6; border-radius: 0.25rem; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>O2 Bottles Management</h1>
-        <h2>Bill for {{ client.name }}</h2>
+    <!-- Company Header (center aligned like PDF) -->
+    <div class="text-center mb-4">
+        <h3 class="fw-bold mb-1">{{ admin_client.company_name|default:"Rainbow Gases" }}</h3>
+        <p class="mb-0">
+            {{ admin_client.address|default:"NH-48 Sr.No 58, Ansar Market Opp.Amar Trupti Hotel, Ankleshwar, Dist-Bharuch" }}
+        </p>
+        <p class="mb-0">
+            E-mail: {{ admin_client.email|default:"rainbowgases@gmail.com" }}
+            {% if admin_client.contact %} | Contact No: {{ admin_client.contact }}{% endif %}
+        </p>
+        {% if admin_client.owner_gst %}
+            <p class="mb-0">GST No: {{ admin_client.owner_gst }}</p>
+        {% endif %}
+        {% if admin_client.jurisdiction %}
+            <p class="mb-0">{{ admin_client.jurisdiction }}</p>
+        {% endif %}
     </div>
-    
-    <div class="client-info">
-        <h3>Client Information</h3>
-        <p><strong>Name:</strong> {{ client.name }}</p>
-        <p><strong>Contact:</strong> {{ client.contact }}</p>
-        <p><strong>Email:</strong> {{ client.email }}</p>
-        <p><strong>Address:</strong> {{ client.address }}</p>
+
+    <!-- Invoice Title and Bill Info -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="fw-bold mb-0">{% if transaction %}TRANSACTION RECEIPT{% else %}TAX INVOICE{% endif %}</h5>
+        <div class="text-end">
+            <p class="mb-1"><strong>{% if transaction %}Transaction No:{% else %}Bill No:{% endif %}</strong> {{ bill.id }}</p>
+            <p class="mb-1"><strong>Date:</strong> {{ bill.bill_date|date:"d/m/Y" }}</p>
+        </div>
     </div>
-    
-    <div class="bill-details">
-        <h3>Bill Details</h3>
-        <p><strong>Bill Date:</strong> {{ bill_date|date:"F d, Y" }}</p>
-        <p><strong>Bill Number:</strong> {{ bill.id }}</p>
+
+    <!-- Bill To -->
+    <div class="mb-3">
+        <h6>Bill To:</h6>
+        <p class="mb-0"><strong>{{ client.name }}</strong></p>
+        <p class="mb-0">{{ client.address }}</p>
+        <p class="mb-0">Contact: {{ client.contact }}</p>
+        {% if client.gst_number %}<p class="mb-0">GST: {{ client.gst_number }}</p>{% endif %}
     </div>
-    
-    <table>
-        <tr>
-            <th>Description</th>
-            <th>Quantity</th>
-            <th>Rate (₹)</th>
-            <th>Amount (₹)</th>
-        </tr>
-        <tr>
-            <td>Oxygen Bottles (Delivered)</td>
-            <td>{{ delivered }}</td>
-            <td>{{ price }}</td>
-            <td>{{ delivered|multiply:price }}</td>
-        </tr>
-        <tr>
-            <td>Oxygen Bottles (Returned)</td>
-            <td>{{ returned }}</td>
-            <td>{{ price }}</td>
-            <td>-{{ returned|multiply:price }}</td>
-        </tr>
-        <tr class="total-row">
-            <td><strong>Total (Pending Bottles)</strong></td>
-            <td><strong>{{ pending }}</strong></td>
-            <td><strong>{{ price }}</strong></td>
-            <td><strong>₹{{ total }}</strong></td>
-        </tr>
+
+    <!-- Dynamic summary sentence like the PDF -->
+    {% if transaction_rows %}
+        {% with first=transaction_rows|first last=transaction_rows|last %}
+            <p class="small text-muted">
+                This {% if transaction %}transaction{% else %}bill{% endif %} covers the supply of a total of {{ bill.delivered_bottles }} gas bottles
+                for the period {{ first.date|date:"jS F Y" }} to {{ last.date|date:"jS F Y" }}.
+            </p>
+        {% endwith %}
+    {% else %}
+        <p class="small text-muted">
+            This {% if transaction %}transaction{% else %}bill{% endif %} covers the supply of a total of {{ bill.delivered_bottles }} gas bottles
+            on {{ bill.bill_date|date:"jS F Y" }}.
+        </p>
+    {% endif %}
+
+    <!-- Transaction Table -->
+    <table class="table table-bordered text-center align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>Date</th>
+                <th>Gas</th>
+                <th>Challan No</th>
+                <th>HSN</th>
+                <th>QTY</th>
+                <th>C.U.M</th>
+                <th>Total QTY</th>
+                <th>Rate</th>
+                <th>Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in transaction_rows %}
+            <tr>
+                <td>{{ row.date|date:"d-m-Y" }}</td>
+                <td>{{ row.gas }}</td>
+                <td>{{ row.challan_no }}</td>
+                <td>{{ row.hsn }}</td>
+                <td>{{ row.qty }}</td>
+                <td>{{ row.cum }}</td>
+                <td>{{ row.total_qty }}</td>
+                <td>₹{{ row.rate }}</td>
+                <td>₹{{ row.amount }}</td>
+            </tr>
+            {% endfor %}
+
+            <!-- Subtotal -->
+            <tr>
+                <td colspan="8" class="text-end"><strong>Subtotal</strong></td>
+                <td>₹{{ bill.subtotal_amount }}</td>
+            </tr>
+
+            <!-- Discount (if any) -->
+            {% if bill.discount_amount and bill.discount_amount|floatformat:2 != '0.00' %}
+            <tr>
+                <td colspan="8" class="text-end"><strong>Discount ({{ bill.discount_percentage }}%)</strong></td>
+                <td>- ₹{{ bill.discount_amount }}</td>
+            </tr>
+            {% endif %}
+
+            <!-- Taxable (if GST applies) -->
+            {% if bill.taxable_amount and bill.taxable_amount|floatformat:2 != '0.00' and bill.gst_amount and bill.gst_amount|floatformat:2 != '0.00' %}
+            <tr>
+                <td colspan="8" class="text-end"><strong>Taxable Value</strong></td>
+                <td>₹{{ bill.taxable_amount }}</td>
+            </tr>
+            {% endif %}
+
+            <!-- GST split if gst_amount > 0 -->
+            {% if bill.gst_amount and bill.gst_amount|floatformat:2 != '0.00' %}
+            <tr>
+                <td colspan="8" class="text-end"><strong>CGST ({{ cgst_percentage }}%)</strong></td>
+                <td>₹{{ cgst_amount }}</td>
+            </tr>
+            <tr>
+                <td colspan="8" class="text-end"><strong>SGST ({{ sgst_percentage }}%)</strong></td>
+                <td>₹{{ sgst_amount }}</td>
+            </tr>
+            {% endif %}
+
+            <!-- Totals row for QTY columns and Grand Total amount -->
+            <tr class="table-success">
+                <td colspan="4" class="text-end"><strong></strong></td>
+                <td><strong>{{ qty_sum }}</strong></td>
+                <td></td>
+                <td><strong>{{ total_qty_sum }}</strong></td>
+                <td class="text-end"><strong>Grand Total</strong></td>
+                <td><strong>₹{{ bill.final_amount }}</strong></td>
+            </tr>
+        </tbody>
     </table>
-    
+
+    <!-- Amount in Words -->
+    <div class="mt-3">
+        <p class="mb-0"><strong>Amount in Words:</strong> {{ amount_in_words|title }}</p>
+    </div>
+
+    <!-- Payment Section -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <h6 class="mb-2">Bank Details</h6>
+            {% if admin_client.account_holder %}<p class="mb-0"><strong>Account Holder:</strong> {{ admin_client.account_holder }}</p>{% endif %}
+            {% if admin_client.account_number %}<p class="mb-0"><strong>Account No:</strong> {{ admin_client.account_number }}</p>{% endif %}
+            {% if admin_client.ifsc %}<p class="mb-0"><strong>IFSC:</strong> {{ admin_client.ifsc }}</p>{% endif %}
+            {% if admin_client.branch %}<p class="mb-0"><strong>Branch:</strong> {{ admin_client.branch }}</p>{% endif %}
+        </div>
+        <div class="col-md-6 text-center">
+            <h6 class="mb-2">UPI Payment</h6>
+            {% if admin_client.vpa %}<p class="mb-0"><strong>VPA:</strong> {{ admin_client.vpa }}</p>{% endif %}
+            {% if admin_client.upi_number %}<p class="mb-0"><strong>UPI No:</strong> {{ admin_client.upi_number }}</p>{% endif %}
+            {% if admin_client.upi_qr %}
+                <div class="mt-2">
+                    <img src="{{ admin_client.upi_qr.url }}" alt="UPI QR" width="120" class="img-thumbnail">
+                    <p class="small text-muted">Scan &amp; Pay</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Terms and Conditions -->
+    <div class="mt-4">
+        <h6 class="fw-bold mb-3">Terms and Conditions</h6>
+        <div class="small text-muted">
+            <p class="mb-2">• Received the above filled cylinders complete with valves and caps.</p>
+            <p class="mb-2">• We agree with the terms and conditions of the agreement, including the rental charges.</p>
+            <p class="mb-2">• Our responsibility ceases as soon as goods have left our warehouse.</p>
+            <p class="mb-2">• Payment is requested by account payee cheque/DD only.</p>
+            <p class="mb-0">• Interest at @24% will be charged if payment is not made within 30 days.</p>
+        </div>
+    </div>
+
+    <!-- Signature Block -->
+    <div class="row mt-5">
+        <div class="col-6">
+            <p class="mb-5">For, {{ admin_client.company_name|default:admin_client.name }}</p>
+            <p style="margin-top:80px;"><strong>Authorized Signatory</strong></p>
+        </div>
+        <div class="col-6 text-end">
+            <!-- Optional receiver signature -->
+        </div>
+    </div>
+
+    <!-- Actions (only show if not in print mode) -->
+    {% if not request.GET.print %}
+    <div class="mt-4">
+        {% if transaction %}
+            <a href="{% url 'transaction_print' transaction.id %}?format=pdf" class="btn btn-danger">Export PDF</a>
+            <button class="btn btn-primary" onclick="window.print()">Print Receipt</button>
+        {% else %}
+            <a href="{% url 'generate_bill' client.id bill.id %}?format=pdf" class="btn btn-danger">Export PDF</a>
+            <button class="btn btn-primary" onclick="window.print()">Print Bill</button>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <div class="footer">
         <p>Thank you for your business!</p>
-        <p>Generated on {{ bill_date|date:"F d, Y at H:i" }}</p>
+        <p>Generated on {{ bill.bill_date|date:"F d, Y at H:i" }}</p>
     </div>
 </body>
 </html> 
