@@ -20,14 +20,14 @@
             </div>
         </div>
     </div>
-    <div class="col-md-2 col-6">
+    <!-- <div class="col-md-2 col-6">
         <div class="card bg-info text-white mb-3">
             <div class="card-body">
                 <h5 class="card-title">Returned</h5>
                 <p class="card-text display-6">{{ returned }}</p>
             </div>
         </div>
-    </div>
+    </div> -->
     <div class="col-md-2 col-6">
         <div class="card bg-warning text-dark mb-3">
             <div class="card-body">
@@ -93,4 +93,57 @@
         {% endfor %}
     </tbody>
 </table>
+
+<!-- Debug Information Section -->
+<div class="mt-5">
+    <h4>Debug Information</h4>
+    <div class="alert alert-info">
+        <h6>Data Consistency Check:</h6>
+        <ul>
+            <li><strong>Total Bottles:</strong> {{ debug_info.total_bottles }}</li>
+            <li><strong>In Stock:</strong> {{ debug_info.in_stock }}</li>
+            <li><strong>Delivered:</strong> {{ debug_info.delivered }}</li>
+            <li><strong>Sum Check (In Stock + Delivered):</strong> {{ debug_info.sum_check }}</li>
+            <li><strong>Returned Transactions:</strong> {{ debug_info.returned_transactions }}</li>
+        </ul>
+        
+        {% if debug_info.sum_check != debug_info.total_bottles %}
+        <div class="alert alert-warning">
+            <strong>⚠️ Data Inconsistency Detected!</strong><br>
+            Sum of In Stock ({{ debug_info.in_stock }}) + Delivered ({{ debug_info.delivered }}) = {{ debug_info.sum_check }}<br>
+            But Total Bottles = {{ debug_info.total_bottles }}<br>
+            Difference: {{ debug_info.total_bottles|add:debug_info.sum_check|floatformat:0|add:"-" }}
+        </div>
+        {% endif %}
+        
+        <h6>Bottles Currently Delivered:</h6>
+        <p><code>{{ debug_info.delivered_bottles_list|join:", " }}</code></p>
+        
+        <h6>Bottles Currently In Stock:</h6>
+        <p><code>{{ debug_info.in_stock_bottles_list|join:", " }}</code></p>
+        
+        {% if debug_info.orphaned_bottles %}
+        <div class="alert alert-danger">
+            <h6>🚨 Orphaned Delivered Bottles (Data Inconsistency):</h6>
+            <p>These bottles are marked as 'delivered' but have no current client or were returned after delivery:</p>
+            <ul>
+                {% for bottle in debug_info.orphaned_bottles %}
+                <li><strong>{{ bottle.bottle_code }}:</strong> {{ bottle.issue }}</li>
+                {% endfor %}
+            </ul>
+            <p><strong>Action Required:</strong> These bottles need to be fixed by either:</p>
+            <ul>
+                <li>Updating their status to 'in_stock' if they were returned</li>
+                <li>Finding and linking them to the correct client if they are actually delivered</li>
+            </ul>
+            <form method="post" action="{% url 'fix_orphaned_bottles' %}" class="mt-3">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to fix these orphaned bottles? This will move them to in_stock status.')">
+                    🔧 Fix Orphaned Bottles Automatically
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
 {% endblock %}

@@ -148,9 +148,6 @@ def admin_dashboard(request):
     in_stock = Bottle.objects.filter(status='in_stock').count()
     delivered = Bottle.objects.filter(status='delivered').count()
 
-    # Pending is same as delivered, since those are bottles with clients
-    pending = delivered  
-
     # Returned count = number of bottles ever returned via transactions
     returned = (
         Transaction.objects.filter(transaction_type='returned')
@@ -158,6 +155,52 @@ def admin_dashboard(request):
         .distinct()
         .count()
     )
+
+    # Pending = bottles currently delivered (status='delivered')
+    # This should match the bottle status page
+    pending = delivered
+    
+    # Debug information to help identify data inconsistencies
+    delivered_bottles = Bottle.objects.filter(status='delivered')
+    delivered_bottles_list = list(delivered_bottles.values_list('code', flat=True))
+    
+    # Check for orphaned delivered bottles (delivered but no current client)
+    orphaned_bottles = []
+    for bottle in delivered_bottles:
+        # Find the latest delivered transaction for this bottle
+        latest_delivered_txn = (
+            Transaction.objects.filter(bottles=bottle, transaction_type='delivered')
+            .order_by('-date')
+            .first()
+        )
+        if not latest_delivered_txn:
+            orphaned_bottles.append({
+                'bottle_code': bottle.code,
+                'issue': 'No delivered transaction found'
+            })
+        else:
+            # Check if this bottle was later returned
+            latest_returned_txn = (
+                Transaction.objects.filter(bottles=bottle, transaction_type='returned')
+                .order_by('-date')
+                .first()
+            )
+            if latest_returned_txn and latest_returned_txn.date > latest_delivered_txn.date:
+                orphaned_bottles.append({
+                    'bottle_code': bottle.code,
+                    'issue': f'Returned after delivery (Return: {latest_returned_txn.date}, Delivery: {latest_delivered_txn.date})'
+                })
+    
+    debug_info = {
+        'total_bottles': total_bottles,
+        'in_stock': in_stock,
+        'delivered': delivered,
+        'returned_transactions': returned,
+        'sum_check': in_stock + delivered,  # Should equal total_bottles
+        'delivered_bottles_list': delivered_bottles_list,
+        'in_stock_bottles_list': list(Bottle.objects.filter(status='in_stock').values_list('code', flat=True)),
+        'orphaned_bottles': orphaned_bottles,
+    }
 
     recent_transactions = Transaction.objects.prefetch_related('bottles').order_by('-date')[:5]
 
@@ -168,6 +211,7 @@ def admin_dashboard(request):
         'in_stock': in_stock,
         'pending': pending,
         'recent_transactions': recent_transactions,
+        'debug_info': debug_info,
     })
 
 
@@ -2210,3 +2254,43 @@ def export_transactions(request):
         return response
     
     return HttpResponse("Invalid request method", status=405)
+
+
+@staff_member_required
+def fix_orphaned_bottles(request):
+    """Fix orphaned delivered bottles that should be in stock"""
+    if request.method == 'POST':
+        # Get all delivered bottles
+        delivered_bottles = Bottle.objects.filter(status='delivered')
+        fixed_count = 0
+        
+        for bottle in delivered_bottles:
+            # Find the latest delivered transaction for this bottle
+            latest_delivered_txn = (
+                Transaction.objects.filter(bottles=bottle, transaction_type='delivered')
+                .order_by('-date')
+                .first()
+            )
+            
+            if not latest_delivered_txn:
+                # No delivered transaction found - fix status
+                bottle.status = 'in_stock'
+                bottle.save()
+                fixed_count += 1
+            else:
+                # Check if this bottle was later returned
+                latest_returned_txn = (
+                    Transaction.objects.filter(bottles=bottle, transaction_type='returned')
+                    .order_by('-date')
+                    .first()
+                )
+                if latest_returned_txn and latest_returned_txn.date > latest_delivered_txn.date:
+                    # Bottle was returned after delivery - fix status
+                    bottle.status = 'in_stock'
+                    bottle.save()
+                    fixed_count += 1
+        
+        messages.success(request, f'Fixed {fixed_count} orphaned bottles. They have been moved to in_stock status.')
+        return redirect('admin_dashboard')
+    
+    return render(request, 'fix_orphaned_bottles.html')

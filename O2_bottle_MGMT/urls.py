@@ -58,6 +58,7 @@ urlpatterns = [
     path('manual-bills/', views.manual_bills_list, name='manual_bills_list'),
     path('bottle-status/', views.bottle_status, name='bottle_status'),
     path('export-transactions/', views.export_transactions, name='export_transactions'),
+    path('fix-orphaned-bottles/', views.fix_orphaned_bottles, name='fix_orphaned_bottles'),
 ]
 
 # Serve media files in development
