@@ -482,6 +482,9 @@ def transaction_edit(request, pk):
     transaction = get_object_or_404(Transaction, pk=pk)
 
     if request.method == 'POST':
+        # Store original bottles before form processing
+        original_bottles = set(transaction.bottles.all())
+        
         form = TransactionForm(request.POST, request.FILES, instance=transaction)
         if form.is_valid():
             updated_transaction = form.save(commit=False)
@@ -493,14 +496,34 @@ def transaction_edit(request, pk):
 
             updated_transaction.save()
             form.save_m2m()
+            
+            # Get new bottles after form processing
+            new_bottles = set(transaction.bottles.all())
+            
+            # Find bottles that were removed from the transaction
+            removed_bottles = original_bottles - new_bottles
 
             # Bottle status updates (only if not billed)
             if not transaction.billed:
-                bottles = transaction.bottles.all()
-                if transaction.transaction_type == 'delivered':
-                    bottles.update(status='delivered')
-                elif transaction.transaction_type == 'returned':
-                    bottles.update(status='in_stock')
+                # Use database transaction to ensure atomicity
+                with db_transaction.atomic():
+                    # Revert status of removed bottles based on transaction type
+                    for bottle in removed_bottles:
+                        if transaction.transaction_type == 'delivered':
+                            # If this was a delivery transaction, bottles should go back to in_stock
+                            bottle.status = 'in_stock'
+                            bottle.save()
+                        elif transaction.transaction_type == 'returned':
+                            # If this was a return transaction, bottles should go back to delivered
+                            bottle.status = 'delivered'
+                            bottle.save()
+                    
+                    # Update status of current bottles based on transaction type
+                    current_bottles = transaction.bottles.all()
+                    if transaction.transaction_type == 'delivered':
+                        current_bottles.update(status='delivered')
+                    elif transaction.transaction_type == 'returned':
+                        current_bottles.update(status='in_stock')
 
             return redirect('transaction_list')
     else:
