@@ -33,6 +33,7 @@ urlpatterns = [
     path('transactions/create/', views.transaction_create, name='transaction_create'),
     path('transactions/<int:pk>/edit/', views.transaction_edit, name='transaction_edit'),
     path('transactions/<int:pk>/delete/', views.transaction_delete, name='transaction_delete'),
+    path('transactions/bulk-delete/', views.transaction_bulk_delete, name='transaction_bulk_delete'),
     path('transactions/<int:pk>/print/', views.transaction_print, name='transaction_print'),
     path('ajax/get-client-bottles/', views.get_client_bottles, name='get_client_bottles'),
     path('reports/', views.reports_view, name='reports'),

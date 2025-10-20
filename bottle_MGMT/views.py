@@ -423,22 +423,26 @@ def transaction_list(request):
         print("Filtering by client:", client_id)  # Debug print
         transactions = transactions.filter(client_id=client_id)
 
-    # Date range filtering
+    # Date range filtering - use effective date (custom_date if set, else date)
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
     if start_date:
         try:
             start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+            # Filter by effective date: custom_date if set, otherwise date
             transactions = transactions.filter(
-                Q(date__date__gte=start_date_obj) | Q(custom_date__date__gte=start_date_obj)
+                Q(custom_date__date__gte=start_date_obj) | 
+                Q(custom_date__isnull=True, date__date__gte=start_date_obj)
             )
         except ValueError:
             pass
     if end_date:
         try:
             end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+            # Filter by effective date: custom_date if set, otherwise date
             transactions = transactions.filter(
-                Q(date__date__lte=end_date_obj) | Q(custom_date__date__lte=end_date_obj)
+                Q(custom_date__date__lte=end_date_obj) | 
+                Q(custom_date__isnull=True, date__date__lte=end_date_obj)
             )
         except ValueError:
             pass
@@ -506,6 +510,66 @@ def transaction_edit(request, pk):
         'form': form,
         'transaction': transaction
     })
+
+@login_required
+def transaction_bulk_delete(request):
+    """Bulk delete multiple transactions"""
+    if request.method != 'POST':
+        return redirect('transaction_list')
+    
+    transaction_ids = request.POST.getlist('transaction_ids')
+    
+    if not transaction_ids:
+        messages.error(request, 'No transactions selected for deletion.')
+        return redirect('transaction_list')
+    
+    try:
+        # Get the transactions to delete
+        transactions = Transaction.objects.filter(id__in=transaction_ids)
+        
+        if not transactions.exists():
+            messages.error(request, 'No valid transactions found to delete.')
+            return redirect('transaction_list')
+        
+        deleted_count = 0
+        
+        # Delete each transaction and revert bottle statuses
+        for transaction in transactions:
+            # Revert bottle statuses based on transaction type
+            bottles_qs = transaction.bottles.all()
+            if transaction.transaction_type == 'delivered':
+                bottles_qs.update(status='in_stock')
+            elif transaction.transaction_type == 'returned':
+                # A return indicates previously delivered bottles came back; 
+                # removing this should mark them delivered again
+                bottles_qs.update(status='delivered')
+            
+            # Remove any BillTransaction links
+            BillTransaction.objects.filter(transaction=transaction).delete()
+            
+            # Delete the transaction
+            transaction.delete()
+            deleted_count += 1
+        
+        messages.success(request, f'Successfully deleted {deleted_count} transaction(s).')
+        
+    except Exception as e:
+        messages.error(request, f'Error deleting transactions: {str(e)}')
+    
+    # Redirect back to transaction list with current filters
+    # Preserve filter parameters from the request
+    redirect_url = 'transaction_list'
+    params = []
+    
+    for param in ['client', 'type', 'start_date', 'end_date']:
+        value = request.POST.get(param)
+        if value:
+            params.append(f'{param}={value}')
+    
+    if params:
+        redirect_url += '?' + '&'.join(params)
+    
+    return redirect(redirect_url)
 
 @login_required
 def transaction_delete(request, pk):
@@ -680,9 +744,15 @@ def reports_view(request):
         }
 
     stats = {
-        'week': count_stats(transactions.filter(date__gte=week_ago)),
-        'month': count_stats(transactions.filter(date__gte=month_ago)),
-        'year': count_stats(transactions.filter(date__gte=year_ago)),
+        'week': count_stats(transactions.filter(
+            Q(custom_date__gte=week_ago) | Q(custom_date__isnull=True, date__gte=week_ago)
+        )),
+        'month': count_stats(transactions.filter(
+            Q(custom_date__gte=month_ago) | Q(custom_date__isnull=True, date__gte=month_ago)
+        )),
+        'year': count_stats(transactions.filter(
+            Q(custom_date__gte=year_ago) | Q(custom_date__isnull=True, date__gte=year_ago)
+        )),
         'overall': count_stats(transactions),
     }
 
@@ -822,18 +892,24 @@ def custom_billing_view(request, client_id):
         client=client, transaction_type='delivered'
     ).order_by('-date')
 
-    # Apply filters
+    # Apply filters - use effective date (custom_date if set, else date)
     if start_date:
         try:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-            transactions = transactions.filter(date__date__gte=start_date)
+            transactions = transactions.filter(
+                Q(custom_date__date__gte=start_date) | 
+                Q(custom_date__isnull=True, date__date__gte=start_date)
+            )
         except ValueError:
             pass
 
     if end_date:
         try:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-            transactions = transactions.filter(date__date__lte=end_date)
+            transactions = transactions.filter(
+                Q(custom_date__date__lte=end_date) | 
+                Q(custom_date__isnull=True, date__date__lte=end_date)
+            )
         except ValueError:
             pass
 
@@ -2025,14 +2101,20 @@ def export_transactions(request):
         # Filter transactions based on parameters
         transactions = Transaction.objects.select_related('client', 'delivered_by').prefetch_related('bottles')
         
-        # Apply date filters
+        # Apply date filters - use effective date (custom_date if set, else date)
         if start_date:
-            transactions = transactions.filter(date__gte=start_date)
+            transactions = transactions.filter(
+                Q(custom_date__gte=start_date) | 
+                Q(custom_date__isnull=True, date__gte=start_date)
+            )
         if end_date:
             # Add one day to end_date to include the entire day
             from datetime import timedelta
             end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
-            transactions = transactions.filter(date__lt=end_date_obj + timedelta(days=1))
+            transactions = transactions.filter(
+                Q(custom_date__lt=end_date_obj + timedelta(days=1)) | 
+                Q(custom_date__isnull=True, date__lt=end_date_obj + timedelta(days=1))
+            )
         
         # Apply transaction type filter
         if transaction_type:
