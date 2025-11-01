@@ -2399,3 +2399,28 @@ def fix_orphaned_bottles(request):
         return redirect('admin_dashboard')
     
     return render(request, 'fix_orphaned_bottles.html')
+
+
+ 
+
+def dashboard(request):
+    # Example: Fetch all transactions, latest first
+    transactions_list = Transaction.objects.all().order_by('-date')  # You may adjust as needed
+
+    # Set how many items per page (e.g., 10)
+    paginator = Paginator(transactions_list, 10)
+
+    # Get current page number from GET params
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        'total_bottles': get_total_bottles(),          # your custom context function
+        'delivered': get_delivered(),                  # your custom context
+        'in_stock': get_in_stock(),
+        'pending': get_pending_return(),
+        'recent_transactions': page_obj,               # this is a paginated "Page" object
+        'debug_info': get_debug_info(),                # your existing debug data
+        # Add any other context variables you use
+    }
+    return render(request, 'admin_dashboard.html', context)

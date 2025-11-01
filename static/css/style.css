@@ -1,0 +1,186 @@
+body {
+  font-family: "Inter", "Zalando Sans SemiExpanded", Arial, sans-serif;
+  background: #f7f9fb;
+  color: #232b3b;
+}
+
+.card,
+.card-header,
+.card-body { 
+  box-shadow: 0 4px 20px rgba(40,56,90,0.08);
+  border: none; 
+}
+.card-header{
+  padding: 8px;
+}
+/* Pending Return Card Custom Style */
+.pending-return, .card-pending-return {
+  color: #fc6076;
+  background: #fff4f6;
+  font-weight: 700;
+  font-size: 1.13rem;
+  border-radius: 12px;
+  padding: 4px 12px;
+  box-shadow: 0 2px 10px rgba(252,96,118,0.08);
+}
+
+/* Delivered Badge Fix for Contrast */
+.bg-success, .badge.bg-success {
+  background: linear-gradient(90deg, #43e97b 0%, #38f9d7 100%) !important;
+  color: #194d33 !important; /* Dark green for visibility */
+  font-weight: 700;
+  border: 1px solid #43e97b;
+}
+
+/* Other Badges */
+.bg-warning, .badge.bg-warning {
+  background: linear-gradient(90deg, #fbcf70 0%, #f7ea7c 100%) !important;
+  color: #444 !important;
+}
+.bg-danger, .badge.bg-danger {
+  background: linear-gradient(90deg, #fc6076 0%, #ff9a44 100%) !important;
+  color: #fff !important;
+}
+.bg-info, .badge.bg-info {
+  background: linear-gradient(90deg, #43cbff 0%, #38f9d7 100%) !important;
+  color: #fff !important;
+}
+.bg-primary, .card-header.bg-primary {
+  background: linear-gradient(90deg, #6c58e4 0%, #80deea 100%) !important;
+  color: #fff !important;
+}
+
+.inventory-card {
+  transition: box-shadow 0.2s, transform 0.2s;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #edf2fd 60%, #f8fbff 100%);
+  box-shadow: 0 2px 10px rgba(56,165,255,0.07);
+}
+.inventory-card:hover {
+  z-index: 2;
+  box-shadow: 0 8px 32px rgba(56,165,255,0.22);
+  transform: scale(1.03);
+}
+
+.card-title {
+  color: #6c58e4;
+  font-weight: 600;
+  font-size: 1.13rem;
+}
+
+.card-text,
+.display-6 {
+  color: #19202c;
+  font-weight: 700;
+  font-size: 2.1rem;
+  margin-bottom: 0;
+}
+
+.bg-light,
+.table-light {
+  background: #f9fbfe !important;
+}
+
+.table {
+  background: #fff;
+  border-radius: 14px;
+  overflow: visible; /* Fix for border edge cutting */
+  box-shadow: 0 2px 12px rgba(40,56,90,0.04);
+}
+
+.table th,
+.table td {
+  border: none !important;
+  padding: 0.72rem 0.5rem;
+  font-size: 1rem;
+  background: none;
+}
+
+.table thead th {
+  color: #7090b0;
+  font-weight: 600;
+  background: #f7f9fb !important;
+}
+
+/* Data Consistency Table fix */
+.data-consistency-table,
+.data-consistency-table th,
+.data-consistency-table td {
+  border: 1px solid #e0e6f1 !important;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.data-consistency-table {
+  border-radius: 10px !important;
+  overflow: visible !important;
+  box-shadow: 0 2px 10px rgba(40,56,90,0.07);
+  background: #fff;
+}
+.data-consistency-table th:first-child,
+.data-consistency-table td:first-child {
+  border-left: 1px solid #e0e6f1 !important;
+  border-radius: 10px 0 0 10px;
+}
+.data-consistency-table th:last-child,
+.data-consistency-table td:last-child {
+  border-right: 1px solid #e0e6f1 !important;
+  border-radius: 0 10px 10px 0;
+}
+
+.pagination .page-link {
+  border-radius: 8px !important;
+  border: none;
+  color: #6c58e4;
+  background: #f7f9fb;
+  margin: 0 2px;
+  transition: background 0.15s;
+}
+
+.pagination .page-item.active .page-link {
+  background: #6c58e4;
+  color: #fff !important;
+}
+
+.btn-info {
+  background: linear-gradient(90deg, #38f9d7 0%, #43e97b 100%);
+  color: #19202c;
+  border: none;
+}
+
+.btn-danger {
+  background: linear-gradient(90deg, #fc6076 0%, #ff9a44 100%);
+  color: white;
+}
+
+.btn {
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.shadow-sm {
+  box-shadow: 0 4px 18px rgba(32,191,169,0.09)!important;
+}
+
+details summary {
+  font-weight: 600;
+  cursor: pointer;
+  color: #6c58e4;
+  outline: none;
+}
+
+@media (max-width: 575.98px) {
+  .inventory-card { margin-bottom: 15px; }
+  .mb-4, .mb-3 { margin-bottom: 1rem!important; }
+  .display-6 { font-size: 1.6rem; }
+  .table-responsive { overflow-x: auto; }
+}
+
+/* Hide/soften Bootstrap default borders and backgrounds */
+.table-bordered th, .table-bordered td {
+  border: none!important;
+}
+
+.table-striped > tbody > tr:nth-of-type(even) {
+  background-color: #f7f9fb !important;
+}
+

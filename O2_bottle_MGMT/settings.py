@@ -75,18 +75,24 @@ WSGI_APPLICATION = 'O2_bottle_MGMT.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': 'rainbowgases$default',
+#         'USER': 'rainbowgases',
+#         'PASSWORD': 'Rainbow@1234',
+#         'HOST': 'rainbowgases.mysql.pythonanywhere-services.com',
+#         'PORT': '3306',
+#     }
+# }
+
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'rainbowgases$default',
-        'USER': 'rainbowgases',
-        'PASSWORD': 'Rainbow@1234',
-        'HOST': 'rainbowgases.mysql.pythonanywhere-services.com',
-        'PORT': '3306',
-    }
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
 }
-
-
+}
 
 
 

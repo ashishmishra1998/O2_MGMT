@@ -3,156 +3,156 @@
 {% block title %}Clients{% endblock %}
 
 {% block content %}
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>{% if show_deleted %}Deleted Clients{% else %}Clients{% endif %}</h2>
-        <div class="btn-group" role="group">
-            <a href="{% url 'client_list' %}" class="btn {% if not show_deleted %}btn-primary{% else %}btn-outline-primary{% endif %}">
-                Active Clients
-            </a>
-            <a href="{% url 'client_list' %}?show_deleted=true" class="btn {% if show_deleted %}btn-danger{% else %}btn-outline-danger{% endif %}">
-                Deleted Clients
-            </a>
-        </div>
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3">
+    <h2 class="mb-2 mb-md-0">{% if show_deleted %}Deleted Clients{% else %}Clients{% endif %}</h2>
+    <div class="btn-group" role="group">
+        <a href="{% url 'client_list' %}" class="btn {% if not show_deleted %}btn-primary{% else %}btn-outline-primary{% endif %}">
+            Active Clients
+        </a>
+        <a href="{% url 'client_list' %}?show_deleted=true" class="btn {% if show_deleted %}btn-danger{% else %}btn-outline-danger{% endif %}">
+            Deleted Clients
+        </a>
     </div>
-    
-    <form method="get" class="row g-3 mb-3">
-        <div class="col-auto">
-            <input type="text" name="q" class="form-control" placeholder="Search by name" value="{{ query }}">
-            {% if show_deleted %}
-            <input type="hidden" name="show_deleted" value="true">
-            {% endif %}
-        </div>
-        <div class="col-auto">
-            <button type="submit" class="btn btn-primary">Search</button>
-        </div>
-        <div class="col-auto">
-            {% if request.user.is_staff and not show_deleted %}
-            <a href="{% url 'client_create' %}" class="btn btn-success">Add New Client</a>
-            {% endif %}
-        </div>
-    </form>
+</div>
+<form method="get" class="row g-3 mb-3">
+    <div class="col-12 col-md-auto">
+        <input type="text" name="q" class="form-control" placeholder="Search by name" value="{{ query }}">
+        {% if show_deleted %}
+        <input type="hidden" name="show_deleted" value="true">
+        {% endif %}
+    </div>
+    <div class="col-12 col-md-auto">
+        <button type="submit" class="btn btn-primary">Search</button>
+    </div>
+    <div class="col-12 col-md-auto">
+        {% if request.user.is_staff and not show_deleted %}
+        <a href="{% url 'client_create' %}" class="btn btn-success">Add New Client</a>
+        {% endif %}
+    </div>
+</form>
 
-    <table class="table table-bordered table-striped">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Contact</th>
-                <th>Alternative Contact</th>
-                <th>Company Name</th>
-                <th>GST Number</th>
-                <th>Email</th>
-                <th>Address</th>
-                {% if not show_deleted %}
-                <th>Total Delivered</th>
-                <th>Total Returned</th>
-                <th>Total Pending</th>
-                <th>Unbilled Bottles</th>
-                {% else %}
-                <th>Deleted At</th>
+<div class="table-responsive client-list">
+<table class="table table-bordered table-striped">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Contact</th>
+            <th>Alternative Contact</th>
+            <th>Company Name</th>
+            <th>GST Number</th>
+            <th>Email</th>
+            <th>Address</th>
+            {% if not show_deleted %}
+            <th>Total Delivered</th>
+            <th>Total Returned</th>
+            <th>Total Pending</th>
+            <th>Unbilled Bottles</th>
+            {% else %}
+            <th>Deleted At</th>
+            {% endif %}
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for stat in client_stats %}
+        <tr class="{% if show_deleted %}table-danger{% endif %}">
+            <td data-label="Name">
+                {{ stat.client.name }}
+                {% if show_deleted %}
+                <span class="badge bg-danger ms-2">Deleted</span>
                 {% endif %}
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for stat in client_stats %}
-            <tr class="{% if show_deleted %}table-danger{% endif %}">
-                <td>
-                    {{ stat.client.name }}
-                    {% if show_deleted %}
-                    <span class="badge bg-danger ms-2">Deleted</span>
-                    {% endif %}
-                </td>
-                <td>{{ stat.client.contact }}</td>
-                <td>{{ stat.client.alt_contact }}</td>
-                <td>{{ stat.client.company_name }}</td>
-                <td>{{ stat.client.gst_number }}</td>
-                <td>{{ stat.client.email }}</td>
-                <td>{{ stat.client.address }}</td>
-                {% if not show_deleted %}
-                <td>{{ stat.delivered }}</td>
-                <td>{{ stat.returned }}</td>
-                <td>
-                    {% if stat.pending > 0 %}
-                        <button class="btn btn-link p-0" data-bs-toggle="modal" data-bs-target="#pendingModal{{ stat.client.id }}">
-                            {{ stat.pending }}
-                        </button>
-
-                        <!-- Pending Bottles Modal -->
-                        <div class="modal fade" id="pendingModal{{ stat.client.id }}" tabindex="-1" aria-hidden="true">
-                          <div class="modal-dialog modal-lg modal-dialog-scrollable">
-                            <div class="modal-content">
-                              <div class="modal-header">
-                                <h5 class="modal-title">Pending Bottles - {{ stat.client.name }}</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                              </div>
-                              <div class="modal-body">
-                                {% if stat.pending_bottles_list %}
-                                    <table class="table table-sm table-bordered">
-                                        <thead class="table-light">
-                                          <tr>
-                                            <th>Bottle Name</th>
-                                            <th>Category</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {% for bottle in stat.pending_bottles_list %}
-                                          <tr>
-                                            <td>{{ bottle.code }}</td>
-                                            <td>{{ bottle.category.name }}</td>
-                                          </tr>
-                                          {% endfor %}
-                                        </tbody>
-                                    </table>
-                                {% else %}
-                                    <p>No pending bottles found.</p>
-                                {% endif %}
-                              </div>
-                              <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                              </div>
-                            </div>
+            </td>
+            <td data-label="Contact">{{ stat.client.contact }}</td>
+            <td data-label="Alternative Contact">{{ stat.client.alt_contact }}</td>
+            <td data-label="Company Name">{{ stat.client.company_name }}</td>
+            <td data-label="GST Number">{{ stat.client.gst_number }}</td>
+            <td data-label="Email">{{ stat.client.email }}</td>
+            <td data-label="Address">{{ stat.client.address }}</td>
+            {% if not show_deleted %}
+            <td data-label="Total Delivered">{{ stat.delivered }}</td>
+            <td data-label="Total Returned">{{ stat.returned }}</td>
+            <td data-label="Total Pending">
+                {% if stat.pending > 0 %}
+                    <button class="btn btn-link p-0" data-bs-toggle="modal" data-bs-target="#pendingModal{{ stat.client.id }}">
+                        {{ stat.pending }}
+                    </button>
+                    <!-- Pending Bottles Modal -->
+                    <div class="modal fade" id="pendingModal{{ stat.client.id }}" tabindex="-1" aria-hidden="true">
+                      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                        <div class="modal-content">
+                          <div class="modal-header">
+                            <h5 class="modal-title">Pending Bottles - {{ stat.client.name }}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                          </div>
+                          <div class="modal-body">
+                            {% if stat.pending_bottles_list %}
+                                <table class="table table-sm table-bordered">
+                                    <thead class="table-light">
+                                      <tr>
+                                        <th>Bottle Name</th>
+                                        <th>Category</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {% for bottle in stat.pending_bottles_list %}
+                                      <tr>
+                                        <td>{{ bottle.code }}</td>
+                                        <td>{{ bottle.category.name }}</td>
+                                      </tr>
+                                      {% endfor %}
+                                    </tbody>
+                                </table>
+                            {% else %}
+                                <p>No pending bottles found.</p>
+                            {% endif %}
+                          </div>
+                          <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                           </div>
                         </div>
-                    {% else %}
-                        {{ stat.pending }}
-                    {% endif %}
-                </td>
-                <td>{{ stat.pending_bill_bottles }}</td>
-                {% else %}
-                <td>{{ stat.client.deleted_at|date:"M d, Y H:i" }}</td>
-                {% endif %}
-                <td>
-                    <div class="btn-group" role="group">
-                        {% if show_deleted %}
-                            {% if request.user.is_staff %}
-                                <a href="{% url 'client_restore' stat.client.id %}" class="btn btn-sm btn-success">Restore</a>
-                            {% endif %}
-                        {% else %}
-                            {% if stat.pending_bill_bottles > 0 %}
-                                <a href="{% url 'generate_bill' stat.client.id %}" class="btn btn-sm btn-info">Auto Bill</a>
-                            {% else %}
-                                <button class="btn btn-sm btn-secondary" disabled>No New Transactions</button>
-                            {% endif %}
-                            <a href="{% url 'custom_billing' stat.client.id %}" class="btn btn-sm btn-primary">Custom Bill</a>
-                            <a href="{% url 'bill_history' stat.client.id %}" class="btn btn-sm btn-warning">Bill History</a>
-                            {% if request.user.is_staff %}
-                                <a href="{% url 'client_edit' stat.client.id %}" class="btn btn-sm btn-success">Edit</a>
-                                <a href="{% url 'client_delete' stat.client.id %}" class="btn btn-sm btn-danger">Delete</a>
-                            {% endif %}
-                        {% endif %}
+                      </div>
                     </div>
-                </td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="{% if show_deleted %}9{% else %}12{% endif %}" class="text-center">
-                    {% if show_deleted %}No deleted clients found.{% else %}No clients found.{% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    <div class="d-flex justify-content-between align-items-center mb-2">
+                {% else %}
+                    {{ stat.pending }}
+                {% endif %}
+            </td>
+            <td data-label="Unbilled Bottles">{{ stat.pending_bill_bottles }}</td>
+            {% else %}
+            <td data-label="Deleted At">{{ stat.client.deleted_at|date:"M d, Y H:i" }}</td>
+            {% endif %}
+            <td data-label="Actions">
+                <div class="btn-group" role="group">
+                    {% if show_deleted %}
+                        {% if request.user.is_staff %}
+                            <a href="{% url 'client_restore' stat.client.id %}" class="btn btn-sm btn-success">Restore</a>
+                        {% endif %}
+                    {% else %}
+                        {% if stat.pending_bill_bottles > 0 %}
+                            <a href="{% url 'generate_bill' stat.client.id %}" class="btn btn-sm btn-info">Auto Bill</a>
+                        {% else %}
+                            <button class="btn btn-sm btn-secondary" disabled>No New Transactions</button>
+                        {% endif %}
+                        <a href="{% url 'custom_billing' stat.client.id %}" class="btn btn-sm btn-primary">Custom Bill</a>
+                        <a href="{% url 'bill_history' stat.client.id %}" class="btn btn-sm btn-warning">Bill History</a>
+                        {% if request.user.is_staff %}
+                            <a href="{% url 'client_edit' stat.client.id %}" class="btn btn-sm btn-success">Edit</a>
+                            <a href="{% url 'client_delete' stat.client.id %}" class="btn btn-sm btn-danger">Delete</a>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="{% if show_deleted %}9{% else %}12{% endif %}" class="text-center">
+                {% if show_deleted %}No deleted clients found.{% else %}No clients found.{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-2">
   <div>
     <strong>Total:</strong> {{ page_obj.paginator.count }} clients
   </div>
@@ -162,8 +162,7 @@
 </div>
 
 <nav aria-label="Page navigation">
-  <ul class="pagination justify-content-center">
-
+  <ul class="pagination justify-content-center flex-wrap">
     {% if page_obj.has_previous %}
       <li class="page-item">
         <a class="page-link" href="?page=1{% if query %}&q={{ query }}{% endif %}{% if show_deleted %}&show_deleted=true{% endif %}">« First</a>
@@ -172,7 +171,6 @@
         <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if show_deleted %}&show_deleted=true{% endif %}">‹ Prev</a>
       </li>
     {% endif %}
-
     {% if page_obj.number > 3 %}
       <li class="page-item">
         <a class="page-link" href="?page=1{% if query %}&q={{ query }}{% endif %}{% if show_deleted %}&show_deleted=true{% endif %}">1</a>
@@ -181,7 +179,6 @@
         <li class="page-item disabled"><span class="page-link">…</span></li>
       {% endif %}
     {% endif %}
-
     {% for num in page_obj.paginator.page_range %}
       {% if num >= page_obj.number|add:'-2' and num <= page_obj.number|add:'2' %}
         {% if num == page_obj.number %}
@@ -193,7 +190,6 @@
         {% endif %}
       {% endif %}
     {% endfor %}
-
     {% if page_obj.number < page_obj.paginator.num_pages|add:'-2' %}
       {% if page_obj.number < page_obj.paginator.num_pages|add:'-3' %}
         <li class="page-item disabled"><span class="page-link">…</span></li>
@@ -202,7 +198,6 @@
         <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if query %}&q={{ query }}{% endif %}{% if show_deleted %}&show_deleted=true{% endif %}">{{ page_obj.paginator.num_pages }}</a>
       </li>
     {% endif %}
-
     {% if page_obj.has_next %}
       <li class="page-item">
         <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if show_deleted %}&show_deleted=true{% endif %}">Next ›</a>
@@ -211,9 +206,6 @@
         <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if query %}&q={{ query }}{% endif %}{% if show_deleted %}&show_deleted=true{% endif %}">Last »</a>
       </li>
     {% endif %}
-
   </ul>
 </nav>
-
 {% endblock %}
-
