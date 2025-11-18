@@ -27,10 +27,13 @@
               <div><strong>Status:</strong> {{ lookup.status|title }}</div>
               {% if lookup.status == 'delivered' and lookup.client %}
                 <div><strong>With Client:</strong> {{ lookup.client.name }}</div>
+                <div><strong>Challan Number:</strong> {% if lookup.challan_number %}{{ lookup.challan_number }}{% else %}-{% endif %}</div>
               {% elif lookup.status == 'in_stock' %}
                 <div><strong>With Client:</strong> - (In Stock)</div>
+                <div><strong>Challan Number:</strong> - (Not applicable for in stock bottles)</div>
               {% else %}
                 <div><strong>With Client:</strong> -</div>
+                <div><strong>Challan Number:</strong> -</div>
               {% endif %}
             </div>
           {% else %}

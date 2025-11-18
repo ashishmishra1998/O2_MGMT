@@ -31,11 +31,9 @@
                     </li>
                 {% endif %}
 
-                {% if request.user.is_staff %}
                 <li class="nav-item">
                     <a class="nav-link {% if request.resolver_match.url_name == 'client_list' %}active{% endif %}" href="{% url 'client_list' %}">Clients</a>
                 </li>
-                {% endif %}
 
                 <li class="nav-item">
                     <a class="nav-link {% if request.resolver_match.url_name == 'transaction_list' %}active{% endif %}" href="{% url 'transaction_list' %}">Transactions</a>
@@ -54,7 +52,9 @@
                         <li><a class="dropdown-item" href="{% url 'bottle_status' %}">Bottle Status</a></li>
                     </ul>
                 </li>
+                {% endif %}
 
+                {% if request.user.is_staff %}
                  <!-- Reports Dropdown -->
                  <li class="nav-item dropdown">
                      <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name in 'sales_analytics reports manual_bill_create manual_bills_list' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">
@@ -71,6 +71,17 @@
                      </ul>
                  </li>
                 {% endif %}
+
+                <!-- Bills Dropdown (for both admin and delivery boy) -->
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle {% if request.resolver_match.url_name in 'manual_bill_create manual_bills_list' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown">
+                        Bills
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'manual_bill_create' %}"><i class="fas fa-file-invoice"></i> Create Manual Bill</a></li>
+                        <li><a class="dropdown-item" href="{% url 'manual_bills_list' %}"><i class="fas fa-list"></i> Manual Bills</a></li>
+                    </ul>
+                </li>
 
                 <!-- Profile Dropdown -->
                 <li class="nav-item dropdown">

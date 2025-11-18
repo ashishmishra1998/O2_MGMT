@@ -60,7 +60,7 @@
                     <div class="btn-group" role="group">
                         <a href="{% url 'generate_bill' client.id bill.id %}" class="btn btn-sm btn-info">View</a>
                         <a href="{% url 'generate_bill' client.id bill.id %}?format=pdf" class="btn btn-sm btn-danger">PDF</a>
-                        {% if not bill.paid %}
+                        {% if not bill.paid and request.user.is_staff %}
                             <a href="{% url 'mark_bill_paid' bill.id %}" class="btn btn-sm btn-success">Mark Paid</a>
                             <a href="{% url 'delete_bill' bill.id %}" class="btn btn-sm btn-danger">Delete</a>
                         {% endif %}

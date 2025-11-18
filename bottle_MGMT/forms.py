@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import Q
 from django.utils import timezone
 from .models import Client, Transaction, Bottle, BottlePricing, BottleCategory
 from decimal import Decimal
@@ -75,11 +76,127 @@ class TransactionForm(forms.ModelForm):
                 self.fields['bottles'].queryset = Bottle.objects.all()
 
         # --- Edit behavior ---
-        if transaction and transaction.billed:
-            # Lock certain fields if billed
-            locked_fields = ['client', 'bottles', 'transaction_type']
-            for field in locked_fields:
-                self.fields[field].disabled = True
+        if transaction:
+            if transaction.billed:
+                # Lock certain fields if billed
+                locked_fields = ['client', 'bottles', 'transaction_type']
+                for field in locked_fields:
+                    self.fields[field].disabled = True
+            else:
+                # Not billed - allow editing with proper bottle filtering
+                # Get bottles already in this transaction (should always be available)
+                current_bottle_ids = set(transaction.bottles.values_list('id', flat=True))
+                
+                # Determine transaction type:
+                # 1. From kwargs (transaction_type parameter passed to form)
+                # 2. From form data if form has been submitted
+                # 3. From existing transaction instance
+                tx_type = transaction_type
+                if not tx_type and self.data.get('transaction_type'):
+                    tx_type = self.data.get('transaction_type')
+                if not tx_type:
+                    tx_type = transaction.transaction_type
+                
+                if tx_type == 'delivered':
+                    # For delivery transactions: show in_stock bottles + bottles already in this transaction
+                    # This allows keeping current bottles and adding new in_stock bottles
+                    self.fields['bottles'].queryset = Bottle.objects.filter(
+                        Q(status='in_stock') | Q(id__in=current_bottle_ids)
+                    ).distinct()
+                elif tx_type == 'returned':
+                    # For return transactions: show delivered bottles for this client + bottles already in this transaction
+                    # Get client from form data if available (in case client is being changed), otherwise use transaction's client
+                    client_id = None
+                    if self.data.get('client'):
+                        try:
+                            client_id = int(self.data.get('client'))
+                        except (ValueError, TypeError):
+                            pass
+                    if not client_id:
+                        client_id = transaction.client_id
+                    
+                    if client_id:
+                        delivered_bottles = Bottle.objects.filter(
+                            transaction__client_id=client_id,
+                            transaction__transaction_type='delivered',
+                            status='delivered'
+                        ).distinct()
+                        
+                        # Combine with bottles already in this transaction
+                        self.fields['bottles'].queryset = (
+                            delivered_bottles | Bottle.objects.filter(id__in=current_bottle_ids)
+                        ).distinct()
+                    else:
+                        # No client selected yet, only show bottles already in transaction
+                        self.fields['bottles'].queryset = Bottle.objects.filter(id__in=current_bottle_ids)
+
+    def clean_bottles(self):
+        """Validate that selected bottles are appropriate for the transaction type"""
+        bottles = self.cleaned_data.get('bottles')
+        transaction_type = self.cleaned_data.get('transaction_type')
+        transaction = self.instance
+        
+        if not bottles:
+            return bottles
+        
+        if transaction_type == 'delivered':
+            # For delivery transactions, only in_stock bottles are allowed
+            # OR bottles that are already in this transaction (to allow keeping them)
+            current_bottle_ids = set()
+            if transaction and transaction.pk:
+                current_bottle_ids = set(transaction.bottles.values_list('id', flat=True))
+            
+            invalid_bottles = []
+            for bottle in bottles:
+                # Allow if in_stock or already in this transaction
+                if bottle.status != 'in_stock' and bottle.id not in current_bottle_ids:
+                    invalid_bottles.append(bottle.code)
+            
+            if invalid_bottles:
+                raise forms.ValidationError(
+                    f"The following bottles are already delivered and cannot be selected: {', '.join(invalid_bottles)}. "
+                    "Only bottles with 'in_stock' status can be delivered. "
+                    "Please return the bottles first before delivering them to another client."
+                )
+        
+        elif transaction_type == 'returned':
+            # For return transactions, only bottles delivered to this client are allowed
+            # OR bottles that are already in this transaction
+            client = self.cleaned_data.get('client')
+            if not client:
+                return bottles
+            
+            current_bottle_ids = set()
+            if transaction and transaction.pk:
+                current_bottle_ids = set(transaction.bottles.values_list('id', flat=True))
+            
+            invalid_bottles = []
+            for bottle in bottles:
+                # Skip validation for bottles already in this transaction
+                if bottle.id in current_bottle_ids:
+                    continue
+                
+                # Check if bottle is delivered to this client
+                if bottle.status != 'delivered':
+                    invalid_bottles.append(bottle.code)
+                else:
+                    # Verify bottle is actually delivered to this client
+                    is_delivered_to_client = Transaction.objects.filter(
+                        bottles=bottle,
+                        client=client,
+                        transaction_type='delivered'
+                    ).exists()
+                    
+                    if not is_delivered_to_client:
+                        invalid_bottles.append(bottle.code)
+            
+            if invalid_bottles:
+                raise forms.ValidationError(
+                    f"The following bottles are not delivered to this client: {', '.join(invalid_bottles)}. "
+                    "You can only return bottles that have been delivered to this client."
+                )
+        
+        return bottles
     
 class TransactionEditForm(forms.ModelForm):
     class Meta:

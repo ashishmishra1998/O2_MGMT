@@ -54,19 +54,24 @@ def bottle_status(request):
         if bottle:
             current_status = bottle.status
             current_client = None
+            challan_number = None
             if current_status == 'delivered':
-                # Find latest delivered transaction for this bottle to identify current client
+                # Find latest delivered transaction for this bottle to identify current client and challan
+                # Use effective date (custom_date if set, else date) for consistency
                 last_delivered_txn = (
                     Transaction.objects.filter(bottles=bottle, transaction_type='delivered')
-                    .order_by('-date')
+                    .order_by(Coalesce('custom_date', 'date').desc())
                     .first()
                 )
-                current_client = last_delivered_txn.client if last_delivered_txn else None
+                if last_delivered_txn:
+                    current_client = last_delivered_txn.client
+                    challan_number = last_delivered_txn.challan_number
             lookup = {
                 'exists': True,
                 'bottle': bottle,
                 'status': current_status,
                 'client': current_client,
+                'challan_number': challan_number,
             }
         else:
             lookup = {
@@ -76,12 +81,13 @@ def bottle_status(request):
 
     # Build summary: which clients currently hold how many bottles
     # Strategy: iterate bottles with status='delivered' and map to latest delivered txn's client
+    # Use effective date (custom_date if set, else date) for consistency
     delivered_bottles = Bottle.objects.filter(status='delivered').order_by('code')
     client_to_bottles = {}
     for b in delivered_bottles:
         last_delivered_txn = (
             Transaction.objects.filter(bottles=b, transaction_type='delivered')
-            .order_by('-date')
+            .order_by(Coalesce('custom_date', 'date').desc())
             .first()
         )
         if last_delivered_txn:
@@ -927,7 +933,7 @@ def pricing_view(request):
         form = BottlePricingForm(instance=pricing)
     return render(request, 'pricing.html', {'form': form, 'pricing': pricing})
 
-@staff_member_required
+@login_required
 def custom_billing_view(request, client_id):
     """View client transactions for custom billing"""
     client = get_object_or_404(Client, id=client_id)
@@ -996,7 +1002,7 @@ def custom_billing_view(request, client_id):
 
     return render(request, 'custom_billing.html', context)
 
-@staff_member_required
+@login_required
 def create_custom_bill(request, client_id):
     if request.method != 'POST':
         return redirect('custom_billing', client_id=client_id)
@@ -1111,7 +1117,7 @@ def create_custom_bill(request, client_id):
     return render(request, 'generate_bill.html', context)
 
 
-@staff_member_required
+@login_required
 def generate_bill(request, client_id, bill_id=None):
     admin_client = Client.objects.filter(role='admin').first()
     client = get_object_or_404(Client, id=client_id)
@@ -1601,7 +1607,7 @@ def generate_pdf_bill(request, context):
     response["Content-Disposition"] = f'attachment; filename="bill_{getattr(client, "name", "client")}_{getattr(bill, "bill_date", "").strftime("%Y%m%d") if getattr(bill, "bill_date", None) else ""}.pdf"'
     return response
 
-@staff_member_required
+@login_required
 def bill_history(request, client_id):
     """View bill history for a specific client"""
     client = get_object_or_404(Client, id=client_id)
@@ -1942,7 +1948,7 @@ def category_edit(request, category_id):
     
     return render(request, 'category_form.html', {'form': form, 'category': category, 'edit': True})
 
-@staff_member_required
+@login_required
 def manual_bill_create(request):
     """Create a manual bill with multiple rows (uses ManualBillRow)."""
     if request.method == 'POST':
@@ -2114,7 +2120,7 @@ def manual_bill_create(request):
         })
     return render(request, 'manual_bill.html', {'form': form, 'default_hsn': default_hsn,'default_cum': default_cum})
 
-@staff_member_required
+@login_required
 def manual_bills_list(request):
     """List all manually created bills"""
     # Get all manual bills
