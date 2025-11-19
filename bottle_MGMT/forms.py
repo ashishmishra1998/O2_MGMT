@@ -1,5 +1,6 @@
 from django import forms
 from django.db.models import Q
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from .models import Client, Transaction, Bottle, BottlePricing, BottleCategory
 from decimal import Decimal
@@ -116,16 +117,23 @@ class TransactionForm(forms.ModelForm):
                         client_id = transaction.client_id
                     
                     if client_id:
-                        delivered_bottles = Bottle.objects.filter(
-                            transaction__client_id=client_id,
-                            transaction__transaction_type='delivered',
-                            status='delivered'
-                        ).distinct()
+                        # Get all bottles that are currently delivered
+                        delivered_bottles = Bottle.objects.filter(status='delivered')
+                        
+                        # Filter to only include bottles where the latest delivered transaction is for this client
+                        valid_bottle_ids = []
+                        for bottle in delivered_bottles:
+                            latest_delivered_txn = (
+                                Transaction.objects.filter(bottles=bottle, transaction_type='delivered')
+                                .order_by(Coalesce('custom_date', 'date').desc())
+                                .first()
+                            )
+                            if latest_delivered_txn and latest_delivered_txn.client_id == client_id:
+                                valid_bottle_ids.append(bottle.id)
                         
                         # Combine with bottles already in this transaction
-                        self.fields['bottles'].queryset = (
-                            delivered_bottles | Bottle.objects.filter(id__in=current_bottle_ids)
-                        ).distinct()
+                        valid_bottle_ids.extend(current_bottle_ids)
+                        self.fields['bottles'].queryset = Bottle.objects.filter(id__in=valid_bottle_ids).distinct()
                     else:
                         # No client selected yet, only show bottles already in transaction
                         self.fields['bottles'].queryset = Bottle.objects.filter(id__in=current_bottle_ids)
@@ -180,14 +188,14 @@ class TransactionForm(forms.ModelForm):
                 if bottle.status != 'delivered':
                     invalid_bottles.append(bottle.code)
                 else:
-                    # Verify bottle is actually delivered to this client
-                    is_delivered_to_client = Transaction.objects.filter(
-                        bottles=bottle,
-                        client=client,
-                        transaction_type='delivered'
-                    ).exists()
+                    # Verify bottle's LATEST delivered transaction is for this client
+                    latest_delivered_txn = (
+                        Transaction.objects.filter(bottles=bottle, transaction_type='delivered')
+                        .order_by(Coalesce('custom_date', 'date').desc())
+                        .first()
+                    )
                     
-                    if not is_delivered_to_client:
+                    if not latest_delivered_txn or latest_delivered_txn.client_id != client.id:
                         invalid_bottles.append(bottle.code)
             
             if invalid_bottles:

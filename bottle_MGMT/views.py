@@ -354,15 +354,22 @@ def get_client_bottles(request):
     bottles_data = []
 
     if client_id and transaction_type == 'returned':
-        # Bottles delivered to this client, still marked delivered
-        bottles = Bottle.objects.filter(
-            transaction__client_id=client_id,
-            transaction__transaction_type='delivered',
-            status='delivered'
-        ).distinct()
-
-        for bottle in bottles:
-            bottles_data.append({'id': bottle.id, 'name': bottle.code})  # adjust 'code' if needed
+        # Get all bottles that are currently delivered
+        delivered_bottles = Bottle.objects.filter(status='delivered')
+        
+        # For each delivered bottle, find the latest delivered transaction
+        # and only include bottles where the latest transaction is for this client
+        for bottle in delivered_bottles:
+            # Find the latest delivered transaction for this bottle
+            latest_delivered_txn = (
+                Transaction.objects.filter(bottles=bottle, transaction_type='delivered')
+                .order_by(Coalesce('custom_date', 'date').desc())
+                .first()
+            )
+            
+            # Only include if the latest transaction is for the selected client
+            if latest_delivered_txn and latest_delivered_txn.client_id == int(client_id):
+                bottles_data.append({'id': bottle.id, 'name': bottle.code})
 
     return JsonResponse({'bottles': bottles_data})
   
@@ -379,11 +386,21 @@ def transaction_create(request):
         # Fix: update bottles queryset based on client for returned transactions
         if transaction_type == 'returned' and 'client' in request.POST:
             client_id = request.POST['client']
-            form.fields['bottles'].queryset = Bottle.objects.filter(
-                transaction__client_id=client_id,
-                transaction__transaction_type='delivered',
-                status='delivered'
-            ).distinct()
+            # Get all bottles that are currently delivered
+            delivered_bottles = Bottle.objects.filter(status='delivered')
+            
+            # Filter to only include bottles where the latest delivered transaction is for this client
+            valid_bottle_ids = []
+            for bottle in delivered_bottles:
+                latest_delivered_txn = (
+                    Transaction.objects.filter(bottles=bottle, transaction_type='delivered')
+                    .order_by(Coalesce('custom_date', 'date').desc())
+                    .first()
+                )
+                if latest_delivered_txn and latest_delivered_txn.client_id == int(client_id):
+                    valid_bottle_ids.append(bottle.id)
+            
+            form.fields['bottles'].queryset = Bottle.objects.filter(id__in=valid_bottle_ids)
 
         if form.is_valid():
             transaction = form.save(commit=False)
