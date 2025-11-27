@@ -665,6 +665,171 @@ def transaction_delete(request, pk):
     return render(request, 'delete_bill.html', { 'bill': None })
 
 @login_required
+def transaction_preview(request):
+    """Preview/Print view for transaction before submission - uses same format as transaction_print"""
+    if request.method != 'POST':
+        return HttpResponse('Preview only available via POST', status=400)
+    
+    # Get form data
+    transaction_type = request.POST.get('transaction_type')
+    client_id = request.POST.get('client')
+    bottle_ids = request.POST.getlist('bottles')
+    challan_number = request.POST.get('challan_number', '')
+    custom_date_str = request.POST.get('custom_date', '')
+    
+    if not transaction_type or not client_id or not bottle_ids:
+        return HttpResponse('Missing required fields', status=400)
+    
+    try:
+        client = Client.objects.get(id=client_id)
+        bottles = Bottle.objects.filter(id__in=bottle_ids)
+        
+        if not bottles.exists():
+            return HttpResponse('No bottles selected', status=400)
+        
+        # Parse custom date if provided
+        transaction_date = timezone.now()
+        if custom_date_str:
+            try:
+                transaction_date = datetime.strptime(custom_date_str, '%Y-%m-%dT%H:%M')
+                transaction_date = timezone.make_aware(transaction_date)
+            except ValueError:
+                pass
+        
+        # Get admin client info
+        admin_client = Client.objects.filter(role='admin').first()
+        
+        # Create a mock transaction object for preview
+        class MockTransaction:
+            def __init__(self):
+                self.id = 'PREVIEW'
+                self.client = client
+                self.custom_date = transaction_date if custom_date_str else None
+                self.date = transaction_date
+                self.transaction_type = transaction_type
+                self.challan_number = int(challan_number) if challan_number else None
+                self.delivered_by = request.user
+                self.bottles = bottles
+        
+        transaction = MockTransaction()
+        
+        # Create a mock bill object for the transaction
+        class MockBill:
+            def __init__(self, transaction, calculated_amount=Decimal('0.00')):
+                self.id = 'PREVIEW'
+                self.bill_date = transaction.custom_date or transaction.date
+                self.subtotal_amount = calculated_amount
+                self.discount_amount = Decimal('0.00')
+                self.discount_percentage = 0
+                self.taxable_amount = calculated_amount
+                self.gst_amount = Decimal('0.00')
+                self.gst_percentage = 0
+                self.final_amount = calculated_amount
+                self.delivered_bottles = transaction.bottles.count()
+        
+        # Create transaction rows in the same format as admin bills
+        transaction_rows = []
+        
+        # Group bottles by category for better display
+        from collections import defaultdict
+        bottles_by_category = defaultdict(list)
+        for bottle in bottles:
+            category_name = bottle.category.name if bottle.category else 'Uncategorized'
+            bottles_by_category[category_name].append(bottle)
+        
+        for category_name, category_bottles in bottles_by_category.items():
+            # Get pricing and HSN for this category from BottleCategory
+            category = None
+            try:
+                category = category_bottles[0].category
+                rate = category.price if category and category.price else Decimal('0.00')
+            except (AttributeError, IndexError):
+                rate = Decimal('0.00')
+            
+            # Fallback to default pricing if category has no price
+            if rate == Decimal('0.00'):
+                from .models import BottlePricing
+                rate = BottlePricing.get_solo().price
+            
+            # HSN: use category HSN if available, else fallback to admin client HSN, else default
+            hsn = '28044090'  # Default fallback
+            if category and category.hsn:
+                hsn = category.hsn
+            elif admin_client and admin_client.hsn_code:
+                hsn = admin_client.hsn_code
+            
+            # Create a row for this category
+            row = {
+                'date': transaction.custom_date or transaction.date,
+                'gas': category_name,
+                'challan_no': transaction.challan_number or '',
+                'hsn': hsn,
+                'qty': len(category_bottles),
+                'cum': len(category_bottles),
+                'total_qty': len(category_bottles),
+                'rate': rate,
+                'amount': rate * len(category_bottles)
+            }
+            transaction_rows.append(row)
+        
+        # Calculate total amount from transaction rows
+        calculated_amount = sum(row['amount'] for row in transaction_rows)
+        
+        # Create mock bill with calculated amount
+        bill = MockBill(transaction, calculated_amount)
+        
+        # Calculate totals using the same logic as admin bills
+        # Use default GST percentage of 18% (same as admin bills)
+        gst_percentage = Decimal('18.00')
+        discount_percentage = Decimal('0.00')  # No discount for individual transactions
+        
+        # Import the utility function for GST calculation
+        from bottle_MGMT.utils import compute_totals_from_subtotal
+        totals = compute_totals_from_subtotal(
+            subtotal=calculated_amount,
+            discount_pct=discount_percentage,
+            gst_pct=gst_percentage
+        )
+        
+        # Calculate CGST and SGST (split GST equally)
+        cgst_amount = (totals['gst_amount'] / Decimal('2')).quantize(Decimal('0.01'))
+        sgst_amount = cgst_amount
+        cgst_percentage = (gst_percentage / Decimal('2')).quantize(Decimal('0.01'))
+        sgst_percentage = cgst_percentage
+        
+        # Update bill with calculated amounts
+        bill.subtotal_amount = totals['subtotal']
+        bill.discount_amount = totals['discount_amount']
+        bill.discount_percentage = totals['discount_pct']
+        bill.taxable_amount = totals['taxable']
+        bill.gst_amount = totals['gst_amount']
+        bill.gst_percentage = totals['gst_pct']
+        bill.final_amount = totals['final']
+        
+        context = {
+            'client': client,
+            'bill': bill,
+            'transaction_rows': transaction_rows,
+            'cgst_amount': cgst_amount,
+            'sgst_amount': sgst_amount,
+            'cgst_percentage': cgst_percentage,
+            'sgst_percentage': sgst_percentage,
+            'admin_client': admin_client,
+            'amount_in_words': number_to_words(bill.final_amount),
+            'transaction': transaction,
+            'bottles': bottles,
+            'qty_sum': sum(row['qty'] for row in transaction_rows),
+            'total_qty_sum': sum(row['total_qty'] for row in transaction_rows),
+            'is_preview': True,  # Flag to indicate this is a preview
+        }
+        
+        # Use the same template as transaction_print
+        return render(request, 'bill_pdf.html', context)
+        
+    except Exception as e:
+        return HttpResponse(f'Error generating preview: {str(e)}', status=500)
+
+@login_required
 def transaction_print(request, pk):
     """Print view for individual transaction - uses same PDF format as admin bills"""
     transaction = get_object_or_404(Transaction, pk=pk)
@@ -698,22 +863,31 @@ def transaction_print(request, pk):
     from collections import defaultdict
     bottles_by_category = defaultdict(list)
     for bottle in bottles:
-        bottles_by_category[bottle.category.name].append(bottle)
+        category_name = bottle.category.name if bottle.category else 'Uncategorized'
+        bottles_by_category[category_name].append(bottle)
     
     for category_name, category_bottles in bottles_by_category.items():
-        # Get pricing for this category from BottleCategory
+        # Get pricing and HSN for this category from BottleCategory
+        category = None
         try:
             category = category_bottles[0].category
             rate = category.price or Decimal('0.00')
         except (AttributeError, IndexError):
             rate = Decimal('0.00')
         
+        # HSN: use category HSN if available, else fallback to admin client HSN, else default
+        hsn = '28044090'  # Default fallback
+        if category and category.hsn:
+            hsn = category.hsn
+        elif admin_client and admin_client.hsn_code:
+            hsn = admin_client.hsn_code
+        
         # Create a row for this category
         row = {
             'date': transaction.custom_date or transaction.date,
             'gas': category_name,
             'challan_no': transaction.challan_number or '',
-            'hsn': '28044000',  # Standard HSN for oxygen
+            'hsn': hsn,
             'qty': len(category_bottles),
             'cum': len(category_bottles),
             'total_qty': len(category_bottles),

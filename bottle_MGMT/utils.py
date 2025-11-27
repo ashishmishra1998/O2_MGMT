@@ -161,10 +161,19 @@ def build_transaction_rows(transactions, admin_client):
         for cat_name, qty in category_counts.items():
             # Rate: category-specific if available, else default
             first_bottle = txn.bottles.filter(category__name=cat_name).first()
-            if first_bottle and hasattr(first_bottle.category, 'price'):
-                rate = first_bottle.category.price or BottlePricing.get_solo().price
+            category = None
+            if first_bottle and hasattr(first_bottle, 'category') and first_bottle.category:
+                category = first_bottle.category
+                rate = category.price or BottlePricing.get_solo().price
             else:
                 rate = BottlePricing.get_solo().price
+            
+            # HSN: use category HSN if available, else fallback to admin client HSN, else default
+            hsn = '28044090'  # Default fallback
+            if category and category.hsn:
+                hsn = category.hsn
+            elif admin_client and admin_client.hsn_code:
+                hsn = admin_client.hsn_code
 
             amount = (Decimal(qty) * Decimal(rate)).quantize(Decimal('0.01'))
             subtotal += amount
@@ -174,7 +183,7 @@ def build_transaction_rows(transactions, admin_client):
                 'date': txn.custom_date or txn.date,
                 'gas': cat_name,
                 'challan_no': None,  # set later
-                'hsn': admin_client.hsn_code if admin_client and admin_client.hsn_code else '28044090',
+                'hsn': hsn,
                 'qty': qty,
                 'cum': admin_client.cum_value if admin_client and admin_client.cum_value else Decimal('7.00'),
                 'total_qty': qty,

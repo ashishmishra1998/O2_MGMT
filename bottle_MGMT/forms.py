@@ -221,7 +221,7 @@ class BottlePricingForm(forms.ModelForm):
 class BottleCategoryForm(forms.ModelForm):
     class Meta:
         model = BottleCategory
-        fields = ['name', 'price']
+        fields = ['name', 'price', 'hsn']
         
         
 # forms.py — replace ManualBillForm with this updated version

@@ -60,9 +60,14 @@
             <input type="file" name="photos" id="photos" class="form-control" multiple>
         </div>
 
-        <button type="submit" id="submit-btn" class="btn btn-success" {% if not form.fields.bottles.queryset.exists %}disabled{% endif %}>Submit</button>
-        <a href="{% url 'transaction_create' %}" class="btn btn-secondary">Back to Type Selection</a>
-        <a href="{% url 'transaction_list' %}" class="btn btn-secondary">Back to List</a>
+        <div class="d-flex gap-2">
+            <button type="button" id="print-preview-btn" class="btn btn-primary" {% if not form.fields.bottles.queryset.exists %}disabled{% endif %}>
+                <i class="fas fa-print"></i> Print Preview
+            </button>
+            <button type="submit" id="submit-btn" class="btn btn-success" {% if not form.fields.bottles.queryset.exists %}disabled{% endif %}>Submit</button>
+            <a href="{% url 'transaction_create' %}" class="btn btn-secondary">Back to Type Selection</a>
+            <a href="{% url 'transaction_list' %}" class="btn btn-secondary">Back to List</a>
+        </div>
     </form>
 {% endblock %}
 
@@ -123,6 +128,105 @@
             let clientId = $(this).val();
             if(clientId && "{{ transaction_type }}" === "returned") {
                 updateBottles(clientId);
+            }
+        });
+        
+        // Print Preview functionality
+        $('#print-preview-btn').click(function() {
+            // Validate required fields
+            let clientId = $('#id_client').val();
+            let selectedBottles = $('#id_bottles').val();
+            
+            if (!clientId) {
+                alert('Please select a client first.');
+                return;
+            }
+            
+            if (!selectedBottles || selectedBottles.length === 0) {
+                alert('Please select at least one bottle.');
+                return;
+            }
+            
+            // Create a form and submit to preview endpoint
+            let form = $('<form>', {
+                'method': 'POST',
+                'action': '{% url "transaction_preview" %}',
+                'target': '_blank'
+            });
+            
+            // Add all form fields
+            form.append($('<input>', {
+                'type': 'hidden',
+                'name': 'transaction_type',
+                'value': '{{ transaction_type }}'
+            }));
+            form.append($('<input>', {
+                'type': 'hidden',
+                'name': 'client',
+                'value': clientId
+            }));
+            form.append($('<input>', {
+                'type': 'hidden',
+                'name': 'challan_number',
+                'value': $('#id_challan_number').val() || ''
+            }));
+            form.append($('<input>', {
+                'type': 'hidden',
+                'name': 'custom_date',
+                'value': $('#id_custom_date').val() || ''
+            }));
+            
+            // Add all selected bottles
+            if (Array.isArray(selectedBottles)) {
+                selectedBottles.forEach(function(bottleId) {
+                    form.append($('<input>', {
+                        'type': 'hidden',
+                        'name': 'bottles',
+                        'value': bottleId
+                    }));
+                });
+            } else {
+                form.append($('<input>', {
+                    'type': 'hidden',
+                    'name': 'bottles',
+                    'value': selectedBottles
+                }));
+            }
+            
+            // Add CSRF token
+            form.append($('<input>', {
+                'type': 'hidden',
+                'name': 'csrfmiddlewaretoken',
+                'value': $('[name=csrfmiddlewaretoken]').val()
+            }));
+            
+            // Append to body and submit
+            $('body').append(form);
+            form.submit();
+            form.remove();
+        });
+        
+        // Update print preview button state when bottles change
+        $('#id_bottles').on('change', function() {
+            let selectedBottles = $(this).val();
+            let clientId = $('#id_client').val();
+            
+            if (selectedBottles && selectedBottles.length > 0 && clientId) {
+                $('#print-preview-btn').prop('disabled', false);
+            } else {
+                $('#print-preview-btn').prop('disabled', true);
+            }
+        });
+        
+        // Update print preview button state when client changes
+        $('#id_client').on('change', function() {
+            let clientId = $(this).val();
+            let selectedBottles = $('#id_bottles').val();
+            
+            if (selectedBottles && selectedBottles.length > 0 && clientId) {
+                $('#print-preview-btn').prop('disabled', false);
+            } else {
+                $('#print-preview-btn').prop('disabled', true);
             }
         });
     });

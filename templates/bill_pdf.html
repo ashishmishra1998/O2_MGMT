@@ -67,9 +67,55 @@
         .justify-content-between { justify-content: space-between; }
         .align-items-center { align-items: center; }
         .img-thumbnail { border: 1px solid #dee2e6; border-radius: 0.25rem; }
+        .preview-banner {
+            background-color: #ffc107;
+            color: #000;
+            padding: 10px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 20px;
+            border: 2px solid #ff9800;
+        }
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            margin: 5px;
+            text-decoration: none;
+            border: 1px solid #007bff;
+            background-color: #007bff;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+            border-color: #dc3545;
+        }
+        @media print {
+            .preview-banner, .btn {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
+    {% if is_preview %}
+    <div class="preview-banner">
+        ⚠️ PREVIEW - This is a preview of the transaction. The transaction has not been saved yet.
+    </div>
+    {% endif %}
     <!-- Company Header (center aligned like PDF) -->
     <div class="text-center mb-4">
         <h3 class="fw-bold mb-1">{{ admin_client.company_name|default:"Rainbow Gases" }}</h3>
@@ -249,8 +295,15 @@
 
     <!-- Actions (only show if not in print mode) -->
     {% if not request.GET.print %}
-    <div class="mt-4">
-        {% if transaction %}
+    <div class="mt-4" style="text-align: center;">
+        {% if is_preview %}
+            <button class="btn btn-primary" onclick="window.print()" style="padding: 10px 20px; font-size: 16px;">
+                <i class="fas fa-print"></i> Print Preview
+            </button>
+            <button class="btn btn-secondary" onclick="window.close()" style="padding: 10px 20px; font-size: 16px; margin-left: 10px;">
+                Close Preview
+            </button>
+        {% elif transaction %}
             <a href="{% url 'transaction_print' transaction.id %}?format=pdf" class="btn btn-danger">Export PDF</a>
             <button class="btn btn-primary" onclick="window.print()">Print Receipt</button>
         {% else %}
