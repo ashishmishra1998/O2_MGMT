@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}Manual Bill Creation{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h4 class="card-title mb-0">Create Manual Bill</h4>
+          <p class="text-muted mb-0">Enter multiple transactions and generate invoice like actual bills</p>
+        </div>
+        <div class="card-body">
+          <form method="post" id="manualBillForm">
+            {% csrf_token %}
+
+            <!-- Client Info -->
+            <div class="row mb-4">
+              <div class="col-md-6">
+                {{ form.client.label_tag }} {{ form.client }}
+              </div>
+              <div class="col-md-6">
+                {{ form.bill_date.label_tag }} {{ form.bill_date }}
+              </div>
+            </div>
+
+            <!-- Transaction Table -->
+            <div class="mb-4">
+              <h5 class="text-primary border-bottom pb-2">Transaction Details</h5>
+              <table class="table table-bordered text-center" id="transactionTable"  data-default-hsn="{{ default_hsn|default_if_none:'' }}"  data-default-cum="{{ default_cum|default_if_none:'' }}">
+                <thead class="table-light">
+                  <tr>
+                    <th>Date</th>
+                    <th>Gas Type</th>
+                    <th>Challan</th>
+                    <th>HSN</th>
+                    <th>CUM</th>
+                    <th>Qty</th>
+                    <th>Rate</th>
+                    <th>Subtotal</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="transactionRows">
+                  <tr>
+                    <td><input type="date" name="transaction_date[]" class="form-control"></td>
+                    <td>{{ form.gas_type }}</td>
+                    <td><input type="text" name="challan_number[]" class="form-control"></td>
+                    <td><input type="text" name="hsn_code[]" class="form-control" value="{{ default_hsn|default_if_none:'' }}"></td>
+                    <td><input type="text" name="cum_value[]" class="form-control" value="{{ default_cum|default_if_none:'' }}"></td>
+                    <td><input type="number" name="quantity[]" step="1" class="form-control qty"></td>
+                    <td><input type="number" name="rate_per_bottle[]" step="0.01" class="form-control rate"></td>
+                    <td><input type="text" name="subtotal_amount[]" class="form-control subtotal" readonly></td>
+                    <td><button type="button" class="btn btn-danger btn-sm removeRow">Remove</button></td>
+                  </tr>
+                </tbody>
+              </table>
+              <button type="button" id="addRow" class="btn btn-success btn-sm">+ Add Row</button>
+            </div>
+
+            <!-- Financial Summary -->
+            <div class="row mb-4">
+              <div class="col-md-2">
+                {{ form.discount_percentage.label_tag }} {{ form.discount_percentage }}
+              </div>
+              <div class="col-md-2">
+                {{ form.discount_amount.label_tag }} {{ form.discount_amount }}
+              </div>
+              <div class="col-md-2">
+                {{ form.taxable_amount.label_tag }} {{ form.taxable_amount }}
+              </div>
+              <div class="col-md-2">
+                {{ form.gst_percentage.label_tag }} {{ form.gst_percentage }}
+              </div>
+              <div class="col-md-2">
+                {{ form.gst_amount.label_tag }} {{ form.gst_amount }}
+              </div>
+              <div class="col-md-2">
+                {{ form.final_amount.label_tag }} {{ form.final_amount }}
+              </div>
+            </div>
+
+            <!-- Description -->
+            <div class="mb-4">
+              {{ form.description.label_tag }} {{ form.description }}
+            </div>
+
+            <!-- Actions -->
+            <div class="text-center">
+              <button type="submit" class="btn btn-primary btn-lg">
+                <i class="fas fa-file-invoice"></i> Generate Bill
+              </button>
+              <a href="{% url 'client_list' %}" class="btn btn-secondary btn-lg ml-2">
+                <i class="fas fa-arrow-left"></i> Back to Clients
+              </a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const tbody = document.getElementById("transactionRows");
+  const addRowBtn = document.getElementById("addRow");
+
+  function calculateRow(row) {
+    const qty = parseFloat(row.querySelector(".qty")?.value) || 0;
+    const rate = parseFloat(row.querySelector(".rate")?.value) || 0;
+    const subtotal = qty * rate;
+    row.querySelector(".subtotal").value = subtotal.toFixed(2);
+    return subtotal;
+  }
+
+  function calculateTotals() {
+    let subtotalSum = 0;
+    tbody.querySelectorAll("tr").forEach(row => {
+      subtotalSum += calculateRow(row);
+    });
+
+    const discountPct = parseFloat(document.getElementById("id_discount_percentage")?.value) || 0;
+    const gstPct = parseFloat(document.getElementById("id_gst_percentage")?.value) || 0;
+
+    const discountAmt = (subtotalSum * discountPct) / 100;
+    const taxable = subtotalSum - discountAmt;
+    const gstAmt = (taxable * gstPct) / 100;
+    const finalAmt = taxable + gstAmt;
+
+    const discountAmountField = document.getElementById("id_discount_amount");
+    const taxableField = document.getElementById("id_taxable_amount");
+    const gstAmountField = document.getElementById("id_gst_amount");
+    const finalAmountField = document.getElementById("id_final_amount");
+
+    if (discountAmountField) discountAmountField.value = discountAmt.toFixed(2);
+    if (taxableField) taxableField.value = taxable.toFixed(2);
+    if (gstAmountField) gstAmountField.value = gstAmt.toFixed(2);
+    if (finalAmountField) finalAmountField.value = finalAmt.toFixed(2);
+  }
+
+addRowBtn.addEventListener("click", function() {
+    const defaultHsn = tbody.closest("#transactionTable").dataset.defaultHsn || '';
+    const defaultCum = tbody.closest("#transactionTable").dataset.defaultCum || '';
+
+    const newRow = document.createElement("tr");
+    newRow.innerHTML = `
+      <td><input type="date" name="transaction_date[]" class="form-control"></td>
+      <td>{{ form.gas_type }}</td>
+      <td><input type="text" name="challan_number[]" class="form-control"></td>
+      <td><input type="text" name="hsn_code[]" class="form-control" value="${defaultHsn}"></td>
+      <td><input type="text" name="cum_value[]" class="form-control" value="${defaultCum}"></td>
+      <td><input type="number" name="quantity[]" step="1" class="form-control qty"></td>
+      <td><input type="number" name="rate_per_bottle[]" step="0.01" class="form-control rate"></td>
+      <td><input type="text" name="subtotal_amount[]" class="form-control subtotal" readonly></td>
+      <td><button type="button" class="btn btn-danger btn-sm removeRow">Remove</button></td>
+    `;
+    tbody.appendChild(newRow);
+});
+
+  tbody.addEventListener("click", function(e) {
+    if (e.target.classList.contains("removeRow")) {
+      e.target.closest("tr").remove();
+      calculateTotals();
+    }
+  });
+
+  tbody.addEventListener("input", function(e) {
+    if (e.target.classList.contains("qty") || e.target.classList.contains("rate")) {
+      calculateTotals();
+    }
+  });
+
+  document.getElementById("id_discount_percentage")?.addEventListener("input", calculateTotals);
+  document.getElementById("id_gst_percentage")?.addEventListener("input", calculateTotals);
+
+  calculateTotals();
+});
+</script>
+{% endblock %}

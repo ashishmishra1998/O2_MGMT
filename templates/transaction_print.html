@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Transaction Print - {{ transaction.id }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .company-info {
+            margin-bottom: 30px;
+        }
+        .transaction-details {
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 50px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+        }
+        .signature-section {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .signature-box {
+            width: 45%;
+            text-align: center;
+        }
+        .signature-line {
+            border-top: 1px solid #333;
+            margin-top: 50px;
+            padding-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ admin_client.company_name|default:"Rainbow Gases" }}</h1>
+        <p>{{ admin_client.address|default:"NH-48 Sr.No 58, Ansar Market Opp.Amar Trupti Hotel, Ankleshwar, Dist-Bharuch" }}</p>
+        <p>E-mail: {{ admin_client.email|default:"rainbowgases@gmail.com" }}
+        {% if admin_client.contact %} | Contact No: {{ admin_client.contact }}{% endif %}</p>
+        {% if admin_client.owner_gst %}<p>GST No: {{ admin_client.owner_gst }}</p>{% endif %}
+    </div>
+    
+    <div class="company-info">
+        <h3>Transaction Details</h3>
+        <p><strong>Transaction ID:</strong> {{ transaction.id }}</p>
+        <p><strong>Date:</strong> 
+            {% if transaction.custom_date %}
+                {{ transaction.custom_date|date:"d/m/Y H:i" }}
+            {% else %}
+                {{ transaction.date|date:"d/m/Y H:i" }}
+            {% endif %}
+        </p>
+        <p><strong>Type:</strong> {{ transaction.get_transaction_type_display }}</p>
+        {% if transaction.challan_number %}<p><strong>Challan No:</strong> {{ transaction.challan_number }}</p>{% endif %}
+    </div>
+    
+    <div class="transaction-details">
+        <h3>Client Information</h3>
+        <p><strong>Name:</strong> {{ client.name }}</p>
+        <p><strong>Contact:</strong> {{ client.contact }}</p>
+        <p><strong>Address:</strong> {{ client.address }}</p>
+        {% if client.gst_number %}<p><strong>GST:</strong> {{ client.gst_number }}</p>{% endif %}
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Bottle Code</th>
+                <th>Category</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for bottle in bottles %}
+            <tr>
+                <td>{{ bottle.code }}</td>
+                <td>{{ bottle.category.name }}</td>
+                <td>{{ bottle.get_status_display }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <div class="transaction-details">
+        <h3>Delivery Information</h3>
+        <p><strong>Delivered By:</strong> {{ transaction.delivered_by.username }}</p>
+        <p><strong>Total Bottles:</strong> {{ bottles.count }}</p>
+    </div>
+    
+    <div class="signature-section">
+        <div class="signature-box">
+            <p>For, {{ admin_client.company_name|default:"Rainbow Gases" }}</p>
+            <div class="signature-line">Authorized Signatory</div>
+        </div>
+        <div class="signature-box">
+            <p>Received By</p>
+            <div class="signature-line">Client Signature</div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <p>Generated on {{ transaction.date|date:"F d, Y at H:i" }}</p>
+        <p>Thank you for your business!</p>
+    </div>
+</body>
+</html>

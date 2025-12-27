@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load widget_tweaks %}
+
+{% block title %}Edit Transaction{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+{% endblock %}
+
+{% block content %}
+<h2>Edit Transaction #{{ transaction.id }}</h2>
+
+{% if transaction.billed %}
+<div class="alert alert-info">
+  This transaction is billed. Only challan number and custom date can be updated.
+</div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    <div class="mb-3">
+        <label class="form-label">Transaction Type</label>
+        {{ form.transaction_type|add_class:'form-select' }}
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Challan Number</label>
+        {{ form.challan_number|add_class:'form-control' }}
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Client</label>
+        {{ form.client|add_class:'form-select' }}
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Bottles</label>
+        {{ form.bottles|add_class:'form-select select2-multiple' }}
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Transaction Date</label>
+        {{ form.custom_date|add_class:'form-control' }}
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Upload Photos</label>
+        <input type="file" name="photos" class="form-control" multiple>
+    </div>
+
+    <button type="submit" class="btn btn-success">Save</button>
+    <a href="{% url 'transaction_list' %}" class="btn btn-secondary">Cancel</a>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+    $(document).ready(function() {
+        $('.select2-multiple').select2({
+            placeholder: "Select Bottles",
+            allowClear: true,
+            width: '100%'
+        });
+    });
+</script>
+{% endblock %}

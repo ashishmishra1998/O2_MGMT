@@ -14,6 +14,11 @@
     </div>
 
     <div class="mb-3">
+        <label for="id_license_number" class="form-label">License Number</label>
+        {{ form.license_number|add_class:'form-control' }}
+    </div>
+
+    <div class="mb-3">
         <label for="id_account_holder" class="form-label">Account Holder</label>
         {{ form.account_holder|add_class:'form-control' }}
     </div>
@@ -58,6 +63,16 @@
     <div class="mb-3">
         <label for="id_contact" class="form-label">Mobile Number</label>
         {{ form.contact|add_class:'form-control' }}
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label">HSN Code</label>
+        {% render_field form.hsn_code class="form-control" %}
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label">C.U.M. Value</label>
+        {% render_field form.cum_value class="form-control" %}
     </div>
 
     <button type="submit" class="btn btn-success">Save Profile</button>

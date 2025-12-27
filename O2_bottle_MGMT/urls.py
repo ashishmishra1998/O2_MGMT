@@ -26,8 +26,16 @@ urlpatterns = [
     path('delivery-dashboard/', views.delivery_dashboard, name='delivery_dashboard'),
     path('clients/', views.client_list, name='client_list'),
     path('clients/create/', views.client_create, name='client_create'),
+    path('clients/<int:client_id>/edit/', views.client_edit, name='client_edit'),
+    path('clients/<int:client_id>/delete/', views.client_delete, name='client_delete'),
+    path('clients/<int:client_id>/restore/', views.client_restore, name='client_restore'),
     path('transactions/', views.transaction_list, name='transaction_list'),
     path('transactions/create/', views.transaction_create, name='transaction_create'),
+    path('transactions/<int:pk>/edit/', views.transaction_edit, name='transaction_edit'),
+    path('transactions/<int:pk>/delete/', views.transaction_delete, name='transaction_delete'),
+    path('transactions/bulk-delete/', views.transaction_bulk_delete, name='transaction_bulk_delete'),
+    path('transactions/<int:pk>/print/', views.transaction_print, name='transaction_print'),
+    path('ajax/get-client-bottles/', views.get_client_bottles, name='get_client_bottles'),
     path('reports/', views.reports_view, name='reports'),
     path('inventory/', views.inventory_view, name='inventory'),
     path('inventory/add-bottles/', views.add_bottles_view, name='add_bottles'),
@@ -47,6 +55,11 @@ urlpatterns = [
     path('categories/', views.category_list, name='category_list'),
     path('categories/add/', views.category_create, name='category_create'),
     path('categories/<int:category_id>/edit/', views.category_edit, name='category_edit'),
+    path('manual-bill/', views.manual_bill_create, name='manual_bill_create'),
+    path('manual-bills/', views.manual_bills_list, name='manual_bills_list'),
+    path('bottle-status/', views.bottle_status, name='bottle_status'),
+    path('export-transactions/', views.export_transactions, name='export_transactions'),
+    path('fix-orphaned-bottles/', views.fix_orphaned_bottles, name='fix_orphaned_bottles'),
 ]
 
 # Serve media files in development

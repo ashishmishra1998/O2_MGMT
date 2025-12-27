@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-_n!f&x!+j*fp^@dw+w2us0zpe+0%xq$=-d9u)(mm$=_+(2w%&5
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -75,16 +75,30 @@ WSGI_APPLICATION = 'O2_bottle_MGMT.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': 'rainbowgases$default',
+#         'USER': 'rainbowgases',
+#         'PASSWORD': 'Rainbow@1234',
+#         'HOST': 'rainbowgases.mysql.pythonanywhere-services.com',
+#         'PORT': '3306',
+#     }
+# }
+
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
-    }
 }
+}
+
 
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {

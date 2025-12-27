@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Restore Client{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0">Restore Client</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <strong>Info!</strong> This action will restore the client and make them visible in the active clients list.
+                    </div>
+                    
+                    <h5>Client Details:</h5>
+                    <table class="table table-borderless">
+                        <tr>
+                            <td><strong>Name:</strong></td>
+                            <td>{{ client.name }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Contact:</strong></td>
+                            <td>{{ client.contact }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Email:</strong></td>
+                            <td>{{ client.email|default:"Not provided" }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Company:</strong></td>
+                            <td>{{ client.company_name|default:"Not provided" }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Role:</strong></td>
+                            <td>{{ client.get_role_display }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Deleted At:</strong></td>
+                            <td>{{ client.deleted_at|date:"M d, Y H:i" }}</td>
+                        </tr>
+                    </table>
+                    
+                    <form method="post" class="mt-4">
+                        {% csrf_token %}
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'client_list' %}?show_deleted=true" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Back to Deleted Clients
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-undo"></i> Restore Client
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
